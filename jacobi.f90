@@ -446,14 +446,18 @@ contains
                         !         mixed_lims(3), m_b, mixed_lims(5))
 
                         ! print *, i, ". Old: ", single_lims(3:6)
-                        single_lims(3:4) = estimate_r_a_lims(coords(1), mixed_lims, mass_c, mu_a, m_b)
+
+                        single_lims(3:4) = estimate_jacobi_lims(coords(1), mixed_lims, mass_c, mu_a, m_b, &
+                                .true., .false., 0.)
                         width(2) = abs(single_lims(4) - single_lims(3))
 
                         ! Random r_a
                         coords(2) = single_lims(3) + coords(2) * width(2)
 
-                        single_lims(5:6) = estimate_theta_a_lims(coords(1), coords(2), mixed_lims, mass_c, mu_a, m_b)
+                        single_lims(5:6) = estimate_jacobi_lims(coords(1), mixed_lims, mass_c, mu_a, m_b, &
+                                .false., .true., coords(2))
                         width(3) = abs(single_lims(6) - single_lims(5))
+
                         ! print *, i, ". New: " , single_lims(3:6)
 
                         ! Random theta_a
@@ -503,23 +507,25 @@ contains
         end function evaluate_function
 
         ! Estimate the minimum and maximum values of r_a, based on known R_a
-        function estimate_r_a_lims(R_a, mixed_lims, mass_c, mu_a, m_b) result(single_lims)
+        function estimate_jacobi_lims(R_a, mixed_lims, mass_c, mu_a, m_b, estimating_r_a, &
+                estimating_theta_a, small_r_a) result(single_lims)
 
                 implicit none
-                real, intent(in) :: R_a, mixed_lims(6), mass_c, mu_a, m_b
+                real, intent(in) :: R_a, mixed_lims(6), mass_c, mu_a, m_b, small_r_a
+                logical, intent(in) :: estimating_r_a, estimating_theta_a
 
-                real :: test_r_a(10000), mixed_coords(3), width(3), single_lims(2)
+                real :: test_coord(10000), mixed_coords(3), width(3), single_lims(2)
                 integer :: i, j, n
                 logical :: random_range
 
                 ! Use randomly generated coordinates, rather than even distribution across range
                 random_range = .true.
 
-               if (random_range) then
-                        n = size(test_r_a)
-               else
-                        ! n = sqrt(size(test_r_a))
-               end if
+                if (random_range) then
+                        n = size(test_coord)
+                else
+                        n = sqrt(real(size(test_coord)))
+                end if
 
                 ! Generate random R_b and theta_ab (R_a is fixed)
                 call random_number(mixed_coords(2:3))
@@ -534,90 +540,48 @@ contains
                 if (random_range) then
                         do i = 1, n
 
-                                ! Random R_b and theta_ab that change each iteration
+                                ! Generate random R_b and theta_ab that change each iteration
                                 call random_number(mixed_coords(2:3))
 
                                 mixed_coords(2) = mixed_lims(3) + mixed_coords(2) * width(2)
                                 mixed_coords(3) = mixed_lims(5) + mixed_coords(3) * width(3)
 
-                                test_r_a(i) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
+                                if (estimating_r_a) then
+                                        test_coord(i) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
+                                                mixed_coords(2), m_b, mixed_coords(3))
+                                else if (estimating_theta_a) then
+                                        test_coord(i) = calculate_theta_a(small_r_a, mu_a, mixed_coords(1), mass_c, &
                                 mixed_coords(2), m_b, mixed_coords(3))
+
+                                end if
+
                         end do
                 else
                         do i = 1, n
-                                mixed_coords(2) = mixed_lims(3) + (i-1) * width(2) / n
-                                do j = 1, n
-                                        mixed_coords(3) = mixed_lims(5) + (i-1) * width(3) / n
 
-                                        test_r_a(i) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
-                                        mixed_coords(2), m_b, mixed_coords(3))
+                                ! Evenly sample entire range of each coord
+                                mixed_coords(2) = mixed_lims(3) + (i-1) * width(2) / n
+
+                                do j = 1, n
+                                        ! Evenly sample entire range of each coord
+                                        mixed_coords(3) = mixed_lims(5) + (j-1) * width(3) / n
+
+                                        if (estimating_r_a) then
+                                                test_coord(j + (i-1)*(n-1)) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
+                                                mixed_coords(2), m_b, mixed_coords(3))
+                                        else if (estimating_theta_a) then
+                                                test_coord(j + (i-1)*(n-1)) = calculate_theta_a(small_r_a, mu_a, &
+                                                mixed_coords(1), mass_c, mixed_coords(2), m_b, mixed_coords(3))
+                                        end if
+
                                 end do
                         end do
                 end if
 
-                single_lims(1) = minval(test_r_a)
-                single_lims(2) = maxval(test_r_a)
+                single_lims(1) = minval(test_coord)
+                single_lims(2) = maxval(test_coord)
                 ! print *, single_lims
 
-        end function estimate_r_a_lims
-
-        ! Estimate the minimum and maximum values of theta_a, based on known R_a and r_a
-        function estimate_theta_a_lims(R_a, small_r_a, mixed_lims, mass_c, mu_a, m_b) result(single_lims)
-
-                implicit none
-                real, intent(in) :: small_r_a, R_a, mixed_lims(6), mass_c, mu_a, m_b
-
-                real :: test_theta_a(10000), mixed_coords(3), width(3), single_lims(2)
-                integer :: i, j, n
-                logical :: is_range_random
-
-                ! Use randomly generated coordinates, rather than even distribution across range
-                is_range_random = .true.
-
-               if (is_range_random) then
-                        n = size(test_theta_a)
-               else
-                        ! n = sqrt(size(test_theta_a))
-               end if
-
-                ! Generate random R_b and theta_ab (R_a is fixed)
-                call random_number(mixed_coords(2:3))
-
-                ! Ranges of R_a, R_b and theta_ab
-                width(1) = abs(mixed_lims(2) - mixed_lims(1))
-                width(2) = abs(mixed_lims(4) - mixed_lims(3))
-                width(3) = abs(mixed_lims(6) - mixed_lims(5))
-
-                mixed_coords(1) = R_a
-
-                if (is_range_random) then
-                        do i = 1, n
-
-                                ! Random R_b and theta_ab that change each iteration
-                                call random_number(mixed_coords(2:3))
-
-                                mixed_coords(2) = mixed_lims(3) + mixed_coords(2) * width(2)
-                                mixed_coords(3) = mixed_lims(5) + mixed_coords(3) * width(3)
-
-                                test_theta_a(i) = calculate_theta_a(small_r_a, mu_a, mixed_coords(1), mass_c, &
-                                mixed_coords(2), m_b, mixed_coords(3))
-                        end do
-                else
-                        do i = 1, n
-                                mixed_coords(2) = mixed_lims(3) + (i-1) * width(2) / n
-                                do j = 1, n
-                                        mixed_coords(3) = mixed_lims(5) + (i-1) * width(3) / n
-
-                                        test_theta_a(i) = calculate_theta_a(small_r_a, mu_a, mixed_coords(1), mass_c, &
-                                        mixed_coords(2), m_b, mixed_coords(3))
-                                end do
-                        end do
-                end if
-
-                single_lims(1) = minval(test_theta_a)
-                single_lims(2) = maxval(test_theta_a)
-                ! print *, single_lims
-
-        end function estimate_theta_a_lims
+        end function estimate_jacobi_lims
 
 end program integration
