@@ -45,10 +45,8 @@ program integration
         print *, "Single Jacobi integral = ", single_Simpson_integral
 
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
-        single_MC_integral = calculate_single_mc_integral(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
+        single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
         print *, "Single Jacobi integral = ", single_MC_integral
-
-        ! call test_limits(mixed_jacobi_lims)
 
 contains
 
@@ -101,7 +99,7 @@ contains
                         stop
                 end if
 
-                width = abs(b-a)/n
+                width = abs(b - a) / n
 
                 integral = 0
 
@@ -240,7 +238,7 @@ contains
                 ! Variables labelled x, y and z for simplicity
                 do i = 0, n(1)
 
-                        ! Set value for R_a
+                        ! Set value for R_a (mixed and single)
                         x = lims(1) + i * width(1)
 
                         ! Total R_b interegral for set R_a
@@ -248,13 +246,8 @@ contains
 
                         ! For single Jacobi, calculate r_a limits from R_a
                         if (.not. is_mixed) then
-                                ! r_a_min uses R_a_min, R_b_min, theta_ab_max - r smaller with larger theta)
-                                lims(3) = calculate_r_a(mu_a, x, mass_c, &
-                                mixed_lims(3), m_b, mixed_lims(6))
-
-                                ! r_a_max depends on current (single) R_a, but uses full (mixed) R_b_max and theta_ab_min
-                                lims(4) = calculate_r_a(mu_a, x, mass_c, &
-                                        mixed_lims(4), m_b, mixed_lims(5))
+                                lims(3:4) = get_limits(.true., .false., .true., &
+                                        x, 0., mixed_lims, mu_a, m_b, mass_c)
 
                                 width(2) = abs(lims(4) - lims(3)) / n(2)
                                 ! print *, "r_a: ", lims(3), lims(4)
@@ -262,7 +255,7 @@ contains
 
                         do j = 0, n(2)
 
-                                ! Set value for R_b
+                                ! Set value for R_b (mixed) or r_a (single)
                                 y = lims(3) + j * width(2)
 
                                 ! Total theta_ab interegral for set R_a, R_b
@@ -270,13 +263,8 @@ contains
 
                                 ! For single Jacobi, calculate theta_a limits from R_a and r_a
                                 if (.not. is_mixed) then
-                                        ! theta_a_min depends on current R_a (and r_a), but uses full R_b_max and theta_ab_min
-                                        lims(5) = calculate_theta_a(y, mu_a, x, mass_c, &
-                                        mixed_lims(4), m_b, mixed_lims(6))
-
-                                        ! For R_b = 0, theta_a_max = pi
-                                        lims(6) = calculate_theta_a(y, mu_a, x, mass_c, &
-                                                mixed_lims(3), m_b, mixed_lims(5))
+                                        lims(5:6) = get_limits(.false., .true., .true., &
+                                                x, y, mixed_lims, mu_a, m_b, mass_c)
 
                                         width(3) = abs(lims(6) - lims(5)) / n(3)
                                         ! print *, "theta_a: ", lims(5), lims(6)
@@ -284,7 +272,7 @@ contains
 
                                 do k = 0, n(3)
 
-                                        ! Set value for theta_ab
+                                        ! Set value for theta_ab (mixed) or theta_a (single)
                                         z = lims(5) + k * width(3)
 
                                         ! Use Simpon's rule to add contributions for this subinterval
@@ -345,7 +333,7 @@ contains
 
 
         ! Calculate integral with Monte Carlo
-        function calculate_single_mc_integral(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
+        function integrate_MC(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
 
                 implicit none
 
@@ -367,7 +355,6 @@ contains
                 single_lims(2) = mixed_lims(2)
 
                 width(1) = abs(single_lims(2) - single_lims(1))
-                ! print *, "R_a: ", single_lims(1), single_lims(2)
 
                 do i = 0, n
 
@@ -380,38 +367,18 @@ contains
                         ! Random R_a
                         coords(1) = single_lims(1) + coords(1) * width(1)
 
-                        ! r_a_min uses R_a_min, R_b_min, theta_ab_max - r smaller with larger theta)
-                        ! single_lims(3) = calculate_r_a(mu_a, coords(1), mass_c, &
-                                ! mixed_lims(3), m_b, mixed_lims(6))
+                        single_lims(3:4) = get_limits(.true., .false., .true., &
+                                coords(1), 0., mixed_lims, mu_a, m_b, mass_c)
 
-                        ! r_a_max depends on current (single) R_a, but uses full (mixed) R_b_max and theta_ab_min
-                        ! single_lims(4) = calculate_r_a(mu_a, coords(1), mass_c, &
-                                ! mixed_lims(4), m_b, mixed_lims(5))
-
-                        ! print *, "r_a limits: ", single_lims(3), single_lims(4)
-
-                        ! theta_a_min depends on current R_a (and r_a), but uses full R_b_max and theta_ab_min
-                        ! single_lims(5) = calculate_theta_a(coords(2), mu_a, coords(1), mass_c, &
-                        !         mixed_lims(4), m_b, mixed_lims(6))
-
-                        ! For R_b = 0, theta_a_max = pi
-                        ! single_lims(6) = calculate_theta_a(coords(2), mu_a, coords(1), mass_c, &
-                        !         mixed_lims(3), m_b, mixed_lims(5))
-
-                        ! print *, i, ". Old: ", single_lims(3:6)
-
-                        single_lims(3:4) = estimate_jacobi_lims(coords(1), mixed_lims, mass_c, mu_a, m_b, &
-                                .true., .false., 0.)
                         width(2) = abs(single_lims(4) - single_lims(3))
 
                         ! Random r_a
                         coords(2) = single_lims(3) + coords(2) * width(2)
 
-                        single_lims(5:6) = estimate_jacobi_lims(coords(1), mixed_lims, mass_c, mu_a, m_b, &
-                                .false., .true., coords(2))
-                        width(3) = abs(single_lims(6) - single_lims(5))
+                        single_lims(5:6) = get_limits(.false., .true., .true., &
+                                coords(1), coords(2), mixed_lims, mu_a, m_b, mass_c)
 
-                        ! print *, i, ". New: " , single_lims(3:6)
+                        width(3) = abs(single_lims(6) - single_lims(5))
 
                         ! Random theta_a
                         coords(3) = single_lims(5) + coords(3) * width(3)
@@ -428,6 +395,7 @@ contains
                                 print *, "Widths: ", width
                                 print *, "Temp int: ", temp_integral
                         end if
+
                         total_integral = total_integral + temp_integral
 
                 end do
@@ -436,7 +404,7 @@ contains
 
                 total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
 
-        end function calculate_single_mc_integral
+        end function integrate_MC
 
 
         ! Evaluates hardcoded function based on x, y and z
@@ -463,12 +431,12 @@ contains
 
 
         ! Estimate the minimum and maximum values of r_a, based on known R_a
-        function estimate_jacobi_lims(R_a, mixed_lims, mass_c, mu_a, m_b, estimating_r_a, &
+        function estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, mass_c, estimating_r_a, &
                 estimating_theta_a, small_r_a) result(single_lims)
 
                 implicit none
 
-                real, intent(in) :: R_a, mixed_lims(6), mass_c, mu_a, m_b, small_r_a
+                real, intent(in) :: R_a, mixed_lims(6), mu_a, m_b, mass_c, small_r_a
                 logical, intent(in) :: estimating_r_a, estimating_theta_a
 
                 real :: test_coord(10000), mixed_coords(3), width(3), single_lims(2)
@@ -540,5 +508,46 @@ contains
                 ! print *, single_lims
 
         end function estimate_jacobi_lims
+
+
+        function get_limits(get_r_lims, get_theta_lims, estimate_lims, R_a, small_r_a, mixed_lims, mu_a, m_b, mass_c) result(lims)
+
+                implicit none
+
+                real, intent(in) :: R_a, small_r_a, mixed_lims(6), mu_a, m_b, mass_c
+                logical, intent(in) :: get_r_lims, get_theta_lims, estimate_lims
+
+                real :: lims(2)
+
+                if (get_r_lims) then
+                        if (estimate_lims) then
+                                lims(1:2) = estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, mass_c, &
+                                        .true., .false., 0.)
+                        else
+                                ! r_a_min uses R_a_min, R_b_min, theta_ab_max - r smaller with larger theta)
+                                lims(1) = calculate_r_a(mu_a, R_a, mass_c, &
+                                        mixed_lims(3), m_b, mixed_lims(6))
+
+                                ! r_a_max depends on current (single) R_a, but uses full (mixed) R_b_max and theta_ab_min
+                                lims(2) = calculate_r_a(mu_a, R_a, mass_c, &
+                                        mixed_lims(4), m_b, mixed_lims(5))
+                        end if
+
+                else if (get_theta_lims) then
+                        if (estimate_lims) then
+                                lims(1:2) = estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, mass_c, &
+                                .false., .true., small_r_a)
+                        else
+                                ! theta_a_min depends on current R_a (and r_a), but uses full R_b_max and theta_ab_min
+                                lims(1) = calculate_theta_a(small_r_a, mu_a, R_a, mass_c, &
+                                        mixed_lims(4), m_b, mixed_lims(6))
+
+                                ! For R_b = 0, theta_a_max = pi
+                                lims(2) = calculate_theta_a(small_r_a, mu_a, R_a, mass_c, &
+                                        mixed_lims(3), m_b, mixed_lims(5))
+                        end if
+                end if
+
+        end function get_limits
 
 end program integration
