@@ -3,7 +3,7 @@ program integration
         implicit none
         integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n
         real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, mixed_integral, &
-                single_integral, triple_integral
+                single_integral, triple_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
 
         ! Number of points to generate for MC integration
         mc_n = 2000
@@ -34,22 +34,56 @@ program integration
         triple_integral = calculate_triple_integral(mixed_jacobi_n, mixed_jacobi_lims)
         print *, "Triple mixed Jacobi integral = ", triple_integral
 
+        ! Calculate mass relations (three masses defined within)
+        call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
+
         ! Calculate integral for R_a, r_a and theta_a using Simpon's rule on each in turn
-        single_integral = calculate_single_S_integral(single_jacobi_n, mixed_jacobi_lims)
+        single_integral = calculate_single_S_integral(single_jacobi_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
         print *, "Single Jacobi integral = ", single_integral
 
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
-        single_integral = calculate_single_mc_integral(mc_n, mixed_jacobi_lims)
+        single_integral = calculate_single_mc_integral(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
         print *, "Single Jacobi integral = ", single_integral
 
         ! call test_limits(mixed_jacobi_lims)
 
 contains
 
+        subroutine calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
+
+                implicit none
+
+                real, intent(inout) :: mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
+
+                ! Atom masses
+                mass_a = 2.
+                mass_b = 3.
+                mass_c = 4.
+
+                ! Sum of masses
+                mass_total = 0
+                mass_total = mass_a + mass_b + mass_c
+
+                ! Internal reduced masses
+                m_a = 0
+                m_b = 0
+                m_a = mass_b * mass_c / (mass_b + mass_c)
+                m_b = mass_a * mass_c / (mass_a + mass_c)
+
+                ! Reduced channel masses
+                mu_a = 0
+                mu_b = 0
+                mu_a = mass_a * mass_b * mass_c / (mass_total * m_a)
+                mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
+
+        end subroutine calculate_masses
+
         ! Uses Simpson's rule to integrate x^2 or sin(x) between a and b
         ! n is the number of subintervals, which must be positive and even
         function integrate_single_Simpson(n, a, b, is_x_squared) result(integral)
+
                 implicit none
+
                 integer, intent(in) :: n
                 real, intent(in) :: a, b
                 logical, intent(in) :: is_x_squared
@@ -87,11 +121,14 @@ contains
                 else
                         !print *, "The integral of sin(x) from ", a, " to ", b, " is ", integral
                 end if
+
         end function integrate_single_Simpson
 
         ! Returns either x^2 or sin(x) based on flag passed
         function integrand_func(x, is_x_squared) result(integrand)
+
                 implicit none
+
                 real, intent(in) :: x
                 logical, intent(in) :: is_x_squared
 
@@ -108,6 +145,7 @@ contains
         function calculate_r_a(mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
 
                 implicit none
+
                 real, intent(in) :: mu_a, R_a, M_c, R_b, m_b, gamma_ab
 
                 ! r_a
@@ -121,6 +159,7 @@ contains
         function calculate_theta_a(small_r_a, mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
 
                 implicit none
+
                 real, intent(in) :: small_r_a, mu_a, R_a, M_c, R_b, m_b, gamma_ab
 
                 !theta_a
@@ -159,10 +198,12 @@ contains
 
         ! Use Simpson's rule to integrate three independent variables
         function calculate_triple_integral(n, lims) result(total_integral)
+
                 implicit none
 
                 real, intent(in) :: lims(6)
                 integer, intent(in) :: n(3)
+
                 real :: width(3), x, y, z, corners(9), trap_volume, mid_volume, &
                 temp_integral, z_integral, y_integral, total_integral
                 integer :: i, j, k
@@ -251,32 +292,16 @@ contains
         end function calculate_triple_integral
 
         ! Use Simpson's rule to integrate three dependent variables
-        function calculate_single_S_integral(n, mixed_lims) result(total_integral)
+        function calculate_single_S_integral(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
 
                 implicit none
 
-                real, intent(in) :: mixed_lims(6)
+                real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
                 integer, intent(in) :: n(3)
+
                 real :: width(3), x, y, z, single_lims(6), &
-                temp_integral, z_integral, y_integral, total_integral, &
-                mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
+                temp_integral, z_integral, y_integral, total_integral
                 integer :: i, j, k
-
-                ! Atom masses
-                mass_a = 2.
-                mass_b = 3.
-                mass_c = 4.
-
-                ! Sum of masses
-                mass_total = mass_a + mass_b + mass_c
-
-                ! Internal reduced masses
-                m_a = mass_b * mass_c / (mass_b + mass_c)
-                m_b = mass_a * mass_c / (mass_a + mass_c)
-
-                ! Reduced channel masses
-                mu_a = mass_a * mass_b * mass_c / (mass_total * m_a)
-                mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
                 total_integral = 0
                 temp_integral = 0
@@ -371,37 +396,16 @@ contains
         end function calculate_single_S_integral
 
         ! Calculate integral with Monte Carlo
-        function calculate_single_mc_integral(n, mixed_lims) result(total_integral)
+        function calculate_single_mc_integral(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
 
                 implicit none
 
-                real, intent(in) :: mixed_lims(6)
+                real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
                 integer, intent(in) :: n
+
                 real :: width(3), coords(3), single_lims(6), &
-                temp_integral, total_integral, &
-                mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
+                temp_integral, total_integral
                 integer :: i
-
-                ! Atom masses
-                mass_a = 2.
-                mass_b = 3.
-                mass_c = 4.
-
-                ! Sum of masses
-                mass_total = 0
-                mass_total = mass_a + mass_b + mass_c
-
-                ! Internal reduced masses
-                m_a = 0
-                m_b = 0
-                m_a = mass_b * mass_c / (mass_b + mass_c)
-                m_b = mass_a * mass_c / (mass_a + mass_c)
-
-                ! Reduced channel masses
-                mu_a = 0
-                mu_b = 0
-                mu_a = mass_a * mass_b * mass_c / (mass_total * m_a)
-                mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
                 total_integral = 0
 
@@ -489,6 +493,7 @@ contains
         function evaluate_function(x, y, z) result(total_func)
 
                 implicit none
+
                 real, intent(in) :: x, y, z
 
                 real :: total_func, F
@@ -511,6 +516,7 @@ contains
                 estimating_theta_a, small_r_a) result(single_lims)
 
                 implicit none
+
                 real, intent(in) :: R_a, mixed_lims(6), mass_c, mu_a, m_b, small_r_a
                 logical, intent(in) :: estimating_r_a, estimating_theta_a
 
