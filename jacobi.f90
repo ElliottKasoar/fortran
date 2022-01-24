@@ -3,7 +3,8 @@ program integration
         implicit none
         integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n
         real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, mixed_integral, &
-                single_integral, triple_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
+                mixed_Simpson_integral, single_Simpson_integral, single_MC_integral, &
+                mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
 
         ! Number of points to generate for MC integration
         mc_n = 2000
@@ -31,19 +32,21 @@ program integration
         print *, "Mixed Jacobi integral = ", mixed_integral
 
         ! Calculate integral for R_a, R_b and theta_ab using Simpon's rule on each in turn
-        triple_integral = calculate_triple_integral(mixed_jacobi_n, mixed_jacobi_lims)
-        print *, "Triple mixed Jacobi integral = ", triple_integral
+        mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, &
+                mu_a, mu_b, m_a, m_b, mass_c, .true.)
+        print *, "Triple mixed Jacobi integral = ", mixed_Simpson_integral
 
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
         ! Calculate integral for R_a, r_a and theta_a using Simpon's rule on each in turn
-        single_integral = calculate_single_S_integral(single_jacobi_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
-        print *, "Single Jacobi integral = ", single_integral
+        single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
+                mu_a, mu_b, m_a, m_b, mass_c, .false.)
+        print *, "Single Jacobi integral = ", single_Simpson_integral
 
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
-        single_integral = calculate_single_mc_integral(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
-        print *, "Single Jacobi integral = ", single_integral
+        single_MC_integral = calculate_single_mc_integral(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
+        print *, "Single Jacobi integral = ", single_MC_integral
 
         ! call test_limits(mixed_jacobi_lims)
 
@@ -77,6 +80,7 @@ contains
                 mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
         end subroutine calculate_masses
+
 
         ! Uses Simpson's rule to integrate x^2 or sin(x) between a and b
         ! n is the number of subintervals, which must be positive and even
@@ -124,6 +128,7 @@ contains
 
         end function integrate_single_Simpson
 
+
         ! Returns either x^2 or sin(x) based on flag passed
         function integrand_func(x, is_x_squared) result(integrand)
 
@@ -142,13 +147,14 @@ contains
 
         end function integrand_func
 
+
         function calculate_r_a(mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
 
                 implicit none
 
                 real, intent(in) :: mu_a, R_a, M_c, R_b, m_b, gamma_ab
 
-                ! r_a
+                ! coord = r_a
                 real :: coord
 
                 coord = mu_a * sqrt( (R_a / M_c)**2  + (R_b / m_b)**2 &
@@ -156,13 +162,14 @@ contains
 
         end function calculate_r_a
 
+
         function calculate_theta_a(small_r_a, mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
 
                 implicit none
 
                 real, intent(in) :: small_r_a, mu_a, R_a, M_c, R_b, m_b, gamma_ab
 
-                !theta_a
+                ! coord = theta_a
                 real :: temp_r_a, cos_numerator, cos_denominator, cos_coord, coord
 
                 temp_r_a = small_r_a
@@ -196,22 +203,35 @@ contains
 
         end function calculate_theta_a
 
-        ! Use Simpson's rule to integrate three independent variables
-        function calculate_triple_integral(n, lims) result(total_integral)
+
+        ! Use Simpson's rule to integrate three variables
+        ! The is_mixed flag uses constant limits
+        ! Otherwise the limits are dependent on previous variables
+        function integrate_triple_Simpson(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, is_mixed) result(total_integral)
 
                 implicit none
 
-                real, intent(in) :: lims(6)
+                real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
                 integer, intent(in) :: n(3)
+                logical, intent(in) :: is_mixed
 
-                real :: width(3), x, y, z, corners(9), trap_volume, mid_volume, &
-                temp_integral, z_integral, y_integral, total_integral
+                real :: width(3), x, y, z, lims(6), &
+                        temp_integral, z_integral, y_integral, total_integral
                 integer :: i, j, k
 
                 ! Width's of Simpson's rule subintervals for each coordinate
+                ! Still use full mixed R_a limits for single Jacobi
+                lims(1) = mixed_lims(1)
+                lims(2) = mixed_lims(2)
                 width(1) = abs(lims(2) - lims(1)) / n(1)
-                width(2) = abs(lims(4) - lims(3)) / n(2)
-                width(3) = abs(lims(6) - lims(5)) / n(3)
+                if (is_mixed) then
+                        lims(3) = mixed_lims(3)
+                        lims(4) = mixed_lims(4)
+                        lims(5) = mixed_lims(5)
+                        lims(6) = mixed_lims(6)
+                        width(2) = abs(lims(4) - lims(3)) / n(2)
+                        width(3) = abs(lims(6) - lims(5)) / n(3)
+                end if
 
                 total_integral = 0
                 temp_integral = 0
@@ -226,6 +246,20 @@ contains
                         ! Total R_b interegral for set R_a
                         y_integral = 0
 
+                        ! For single Jacobi, calculate r_a limits from R_a
+                        if (.not. is_mixed) then
+                                ! r_a_min uses R_a_min, R_b_min, theta_ab_max - r smaller with larger theta)
+                                lims(3) = calculate_r_a(mu_a, x, mass_c, &
+                                mixed_lims(3), m_b, mixed_lims(6))
+
+                                ! r_a_max depends on current (single) R_a, but uses full (mixed) R_b_max and theta_ab_min
+                                lims(4) = calculate_r_a(mu_a, x, mass_c, &
+                                        mixed_lims(4), m_b, mixed_lims(5))
+
+                                width(2) = abs(lims(4) - lims(3)) / n(2)
+                                ! print *, "r_a: ", lims(3), lims(4)
+                        end if
+
                         do j = 0, n(2)
 
                                 ! Set value for R_b
@@ -233,6 +267,20 @@ contains
 
                                 ! Total theta_ab interegral for set R_a, R_b
                                 z_integral = 0
+
+                                ! For single Jacobi, calculate theta_a limits from R_a and r_a
+                                if (.not. is_mixed) then
+                                        ! theta_a_min depends on current R_a (and r_a), but uses full R_b_max and theta_ab_min
+                                        lims(5) = calculate_theta_a(y, mu_a, x, mass_c, &
+                                        mixed_lims(4), m_b, mixed_lims(6))
+
+                                        ! For R_b = 0, theta_a_max = pi
+                                        lims(6) = calculate_theta_a(y, mu_a, x, mass_c, &
+                                                mixed_lims(3), m_b, mixed_lims(5))
+
+                                        width(3) = abs(lims(6) - lims(5)) / n(3)
+                                        ! print *, "theta_a: ", lims(5), lims(6)
+                                end if
 
                                 do k = 0, n(3)
 
@@ -289,111 +337,12 @@ contains
                 ! Total (R_a) integral
                 total_integral = width(1) * total_integral / 3
 
-        end function calculate_triple_integral
+                if (.not. is_mixed) then
+                        total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
+                end if
 
-        ! Use Simpson's rule to integrate three dependent variables
-        function calculate_single_S_integral(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
+        end function integrate_triple_Simpson
 
-                implicit none
-
-                real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
-                integer, intent(in) :: n(3)
-
-                real :: width(3), x, y, z, single_lims(6), &
-                temp_integral, z_integral, y_integral, total_integral
-                integer :: i, j, k
-
-                total_integral = 0
-                temp_integral = 0
-
-                ! R_a_min and R_a_max can use full mixed R_a limits
-                single_lims(1) = mixed_lims(1)
-                single_lims(2) = mixed_lims(2)
-
-                width(1) = abs(single_lims(2) - single_lims(1)) / n(1)
-
-                do i = 0, n(1)
-
-                        x = single_lims(1) + i * width(1)
-                        y_integral = 0
-
-                        ! r_a_min uses R_a_min, R_b_min, theta_ab_max - r smaller with larger theta)
-                        single_lims(3) = calculate_r_a(mu_a, x, mass_c, &
-                                mixed_lims(3), m_b, mixed_lims(6))
-
-                        ! r_a_max depends on current (single) R_a, but uses full (mixed) R_b_max and theta_ab_min
-                        single_lims(4) = calculate_r_a(mu_a, x, mass_c, &
-                                mixed_lims(4), m_b, mixed_lims(5))
-
-                        width(2) = abs(single_lims(4) - single_lims(3)) / n(2)
-                        ! print *, "r_a: ", single_lims(3), single_lims(4)
-
-                        do j = 0, n(2)
-
-                                y = single_lims(3) + j * width(2)
-
-                                z_integral = 0
-
-                                ! theta_a_min depends on current R_a (and r_a), but uses full R_b_max and theta_ab_min
-                                single_lims(5) = calculate_theta_a(y, mu_a, x, mass_c, &
-                                mixed_lims(4), m_b, mixed_lims(6))
-
-                                ! For R_b = 0, theta_a_max = pi
-                                single_lims(6) = calculate_theta_a(y, mu_a, x, mass_c, &
-                                        mixed_lims(3), m_b, mixed_lims(5))
-
-                                width(3) = abs(single_lims(6) - single_lims(5)) / n(3)
-                                ! print *, "theta_a: ", single_lims(5), single_lims(6)
-
-                                do k = 0, n(3)
-
-                                        z = single_lims(5) + k * width(3)
-
-                                        temp_integral = integrand_func(z, .false.)
-
-                                        if (k == 0 .or. k == n(3)) then
-                                                z_integral = z_integral + temp_integral
-                                        else if (mod(k, 2) == 0) then
-                                                z_integral = z_integral + 2 * temp_integral
-                                        else
-                                                z_integral = z_integral + 4 * temp_integral
-                                        end if
-
-                                end do
-
-                                z_integral = width(3) * z_integral / 3
-
-                                temp_integral = z_integral * integrand_func(y, .true.)
-
-                                if (j == 0 .or. j == n(2)) then
-                                        y_integral = y_integral + temp_integral
-                                else if (mod(j, 2) == 0) then
-                                        y_integral = y_integral + 2 * temp_integral
-                                else
-                                        y_integral = y_integral + 4 * temp_integral
-                                end if
-
-                        end do
-
-                        y_integral = width(2) * y_integral / 3
-
-                        temp_integral = y_integral * integrand_func(x, .true.)
-
-                        if (i == 0 .or. i == n(1)) then
-                                total_integral = total_integral + temp_integral
-                        else if (mod(i, 2) == 0) then
-                                total_integral = total_integral + 2 * temp_integral
-                        else
-                                total_integral = total_integral + 4 * temp_integral
-                        end if
-
-                end do
-
-                total_integral = width(1) * total_integral / 3
-
-                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
-
-        end function calculate_single_S_integral
 
         ! Calculate integral with Monte Carlo
         function calculate_single_mc_integral(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
@@ -489,6 +438,7 @@ contains
 
         end function calculate_single_mc_integral
 
+
         ! Evaluates hardcoded function based on x, y and z
         function evaluate_function(x, y, z) result(total_func)
 
@@ -510,6 +460,7 @@ contains
                 ! print *, "Total func: ", total_func
 
         end function evaluate_function
+
 
         ! Estimate the minimum and maximum values of r_a, based on known R_a
         function estimate_jacobi_lims(R_a, mixed_lims, mass_c, mu_a, m_b, estimating_r_a, &
