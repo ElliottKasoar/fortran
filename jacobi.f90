@@ -1,4 +1,4 @@
-program integration
+program jacobi
 
         implicit none
         integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
@@ -25,7 +25,7 @@ program integration
         ! Limits of integration (x_min, x_max, y_min, y_max, z_min, z_max)
         test_coord_lims = (/ 0., 1., 0., 1., 0., 1. /)
 
-        ! Calculate seperable integrals for R_a, R_b and theta_ab using Simpson's rule
+        ! Calculate separable integrals for R_a, R_b and theta_ab using Simpson's rule
         R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
                 mixed_jacobi_lims(2), .true.)
         R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
@@ -33,14 +33,14 @@ program integration
         theta_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), mixed_jacobi_lims(5), &
                 mixed_jacobi_lims(6), .false.)
 
-        ! Integrals are seperable so multiply for total integral
+        ! Integrals are separable so multiply for total integral
         mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
-        print *, "Mixed Jacobi integral = ", mixed_integral
+        print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
 
         ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
         mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, &
                 mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false.)
-        print *, "Triple mixed Jacobi integral = ", mixed_Simpson_integral
+        print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", mixed_Simpson_integral
 
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
@@ -48,16 +48,16 @@ program integration
         ! Calculate integral for R_a, r_a and theta_a using Simpson's rule on each in turn
         single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
                 mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false.)
-        print *, "Single Jacobi integral = ", single_Simpson_integral
+        print *, "Single Jacobi integral using Simpson's rule = ", single_Simpson_integral
 
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
         single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
-        print *, "Single Jacobi integral = ", single_MC_integral
+        print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
 
         ! Calculate integral for x, y and z using Simpson's rule on each in turn
         test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
                 mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true.)
-        print *, "Test integral = ", test_Simpson_integral
+        print *, "Test integral using Simpson's rule = ", test_Simpson_integral
 
 contains
 
@@ -301,7 +301,7 @@ contains
                                         ! Set value for theta_ab (mixed) or theta_a (single)
                                         z = lims(5) + k * width(3)
 
-                                        ! Use Simpon's rule to add contributions for this subinterval
+                                        ! Use Simpson's rule to add contributions for this subinterval
                                         if (single_jacobi .or. mixed_jacobi) then
                                                 temp_integral = jacobi_integrand_func(z, .false.)
                                         else if (test_coords) then
@@ -635,4 +635,4 @@ contains
 
         end function test_integrand_func
 
-end program integration
+end program jacobi
