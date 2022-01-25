@@ -1,16 +1,23 @@
-program sum
+program average
 
         implicit none
         integer :: arr(6)
-        integer :: n, total
+        integer :: n
+        real :: total, average_num
 
         n = 6
-        arr = [2, 6, 8, 10, 12, 40]
+        arr = [1, 6, 8, 10, 12, 40]
         print *, add_ints(n, arr)
 
-        total = 0
+        total = 0.
+        average_num = 0.
         call add_ints_sub(n, arr, total)
-        print *, total
+        average_num = total / real(n)
+        print *, "Sum of values: ", total
+        print *, "Number of values: ", n
+        print *, "Average of values (real): ", average_num
+        average_num = total / n
+        print *, "Average of values: ", average_num
 
 contains
 
@@ -18,7 +25,7 @@ contains
                 implicit none
                 integer, intent(in) :: n
                 integer, intent(in) :: arr(n)
-                integer, intent(inout) :: total
+                real, intent(inout) :: total
                 integer :: i
 
                 do i = 1, n
@@ -31,13 +38,14 @@ contains
                 integer, intent(in) :: n
                 integer, intent(in) :: arr(n)
 
-                integer :: total, i
+                integer :: i
+                real :: total
 
-                total = 0
+                total = 0.
 
                 do i = 1, n
                        total = total + arr(i)
                 end do
         end function add_ints
 
-end program sum
+end program average
