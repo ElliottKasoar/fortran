@@ -1,23 +1,29 @@
 program integration
 
         implicit none
-        integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n
-        real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, mixed_integral, &
-                mixed_Simpson_integral, single_Simpson_integral, single_MC_integral, &
-                mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
+        integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
+        real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, &
+                mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
+                single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
+                test_Simpson_integral, test_coord_lims(6)
 
         ! Number of points to generate for MC integration
         mc_n = 2000
 
         ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, theta_ab_n)
-        mixed_jacobi_n = (/ 100, 100, 100 /)
+        mixed_jacobi_n = (/ 50, 50, 50 /)
 
         ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, theta_a_n)
-        single_jacobi_n = (/ 100, 100, 100 /)
+        single_jacobi_n = (/ 50, 50, 50 /)
+
+        ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
+        test_coord_n = (/ 1000, 1000, 1000 /)
 
         ! Limits of integration (R_a_min, R_a_max, R_b_min, R_b_max, theta_ab_min, thata_ab_max)
         mixed_jacobi_lims = (/ 0., 5., 0., 7., 0., 4.*atan(1.) /)
-        ! mixed_jacobi_lims = (/ 2., 3., 2., 3., 2., 3. /)
+
+        ! Limits of integration (x_min, x_max, y_min, y_max, z_min, z_max)
+        test_coord_lims = (/ 0., 1., 0., 1., 0., 1. /)
 
         ! Calculate seperable integrals for R_a, R_b and theta_ab using Simpson's rule
         R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
@@ -31,22 +37,27 @@ program integration
         mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
         print *, "Mixed Jacobi integral = ", mixed_integral
 
-        ! Calculate integral for R_a, R_b and theta_ab using Simpon's rule on each in turn
+        ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
         mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, &
-                mu_a, mu_b, m_a, m_b, mass_c, .true.)
+                mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false.)
         print *, "Triple mixed Jacobi integral = ", mixed_Simpson_integral
 
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
-        ! Calculate integral for R_a, r_a and theta_a using Simpon's rule on each in turn
+        ! Calculate integral for R_a, r_a and theta_a using Simpson's rule on each in turn
         single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
-                mu_a, mu_b, m_a, m_b, mass_c, .false.)
+                mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false.)
         print *, "Single Jacobi integral = ", single_Simpson_integral
 
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
         single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
         print *, "Single Jacobi integral = ", single_MC_integral
+
+        ! Calculate integral for x, y and z using Simpson's rule on each in turn
+        test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
+                mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true.)
+        print *, "Test integral = ", test_Simpson_integral
 
 contains
 
@@ -105,7 +116,7 @@ contains
 
                 do i = 0, n
                         x = a + i * width
-                        y(i) = integrand_func(x, is_x_squared)
+                        y(i) = jacobi_integrand_func(x, is_x_squared)
 
                         if (i == 0 .or. i == n) then
                                 integral = integral + y(i)
@@ -128,7 +139,7 @@ contains
 
 
         ! Returns either x^2 or sin(x) based on flag passed
-        function integrand_func(x, is_x_squared) result(integrand)
+        function jacobi_integrand_func(x, is_x_squared) result(integrand)
 
                 implicit none
 
@@ -143,7 +154,7 @@ contains
                         integrand = sin(x)
                 end if
 
-        end function integrand_func
+        end function jacobi_integrand_func
 
 
         function calculate_r_a(mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
@@ -203,26 +214,34 @@ contains
 
 
         ! Use Simpson's rule to integrate three variables
-        ! The is_mixed flag uses constant limits
+        ! The mixed_jacobi flag uses constant limits, while the single_jacobi and
+        ! test_coords flags use constant limits, defined in other functions
         ! Otherwise the limits are dependent on previous variables
-        function integrate_triple_Simpson(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, is_mixed) result(total_integral)
+        function integrate_triple_Simpson(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, &
+                mixed_jacobi, single_jacobi, test_coords) result(total_integral)
 
                 implicit none
 
                 real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
                 integer, intent(in) :: n(3)
-                logical, intent(in) :: is_mixed
+                logical, intent(in) :: mixed_jacobi, single_jacobi, test_coords
 
                 real :: width(3), x, y, z, lims(6), &
                         temp_integral, z_integral, y_integral, total_integral
                 integer :: i, j, k
+
+                if ((mixed_jacobi .and. single_jacobi) .or. (mixed_jacobi .and. test_coords) &
+                        .or. (single_jacobi .and. test_coords)) then
+                        print *, "Only one coordinate flag should be set to true"
+                        stop
+                end if
 
                 ! Width's of Simpson's rule subintervals for each coordinate
                 ! Still use full mixed R_a limits for single Jacobi
                 lims(1) = mixed_lims(1)
                 lims(2) = mixed_lims(2)
                 width(1) = abs(lims(2) - lims(1)) / n(1)
-                if (is_mixed) then
+                if (mixed_jacobi) then
                         lims(3) = mixed_lims(3)
                         lims(4) = mixed_lims(4)
                         lims(5) = mixed_lims(5)
@@ -245,13 +264,16 @@ contains
                         y_integral = 0
 
                         ! For single Jacobi, calculate r_a limits from R_a
-                        if (.not. is_mixed) then
+                        if (single_jacobi) then
                                 lims(3:4) = get_limits(.true., .false., .true., &
                                         x, 0., mixed_lims, mu_a, m_b, mass_c)
-
-                                width(2) = abs(lims(4) - lims(3)) / n(2)
-                                ! print *, "r_a: ", lims(3), lims(4)
                         end if
+
+                        if (test_coords) then
+                                lims(3:4) = get_test_limits(.true., .false., x, 0.)
+                        end if
+
+                        width(2) = abs(lims(4) - lims(3)) / n(2)
 
                         do j = 0, n(2)
 
@@ -262,13 +284,17 @@ contains
                                 z_integral = 0
 
                                 ! For single Jacobi, calculate theta_a limits from R_a and r_a
-                                if (.not. is_mixed) then
+                                if (single_jacobi) then
                                         lims(5:6) = get_limits(.false., .true., .true., &
                                                 x, y, mixed_lims, mu_a, m_b, mass_c)
 
-                                        width(3) = abs(lims(6) - lims(5)) / n(3)
-                                        ! print *, "theta_a: ", lims(5), lims(6)
                                 end if
+
+                                if (test_coords) then
+                                        lims(5:6) = get_test_limits(.false., .true., x, y)
+                                end if
+
+                                width(3) = abs(lims(6) - lims(5)) / n(3)
 
                                 do k = 0, n(3)
 
@@ -276,7 +302,11 @@ contains
                                         z = lims(5) + k * width(3)
 
                                         ! Use Simpon's rule to add contributions for this subinterval
-                                        temp_integral = integrand_func(z, .false.)
+                                        if (single_jacobi .or. mixed_jacobi) then
+                                                temp_integral = jacobi_integrand_func(z, .false.)
+                                        else if (test_coords) then
+                                                temp_integral = test_integrand_func(x, y, z)
+                                        end if
 
                                         if (k == 0 .or. k == n(3)) then
                                                 z_integral = z_integral + temp_integral
@@ -293,7 +323,11 @@ contains
 
                                 ! Use Simpon's rule to add contributions for this subinterval
                                 ! Inlcudes multiplication by total theta_ab integral
-                                temp_integral = z_integral * integrand_func(y, .true.)
+                                if (single_jacobi .or. mixed_jacobi) then
+                                        temp_integral = z_integral * jacobi_integrand_func(y, .true.)
+                                else if (test_coords) then
+                                        temp_integral = z_integral
+                                end if
 
                                 if (j == 0 .or. j == n(2)) then
                                         y_integral = y_integral + temp_integral
@@ -310,7 +344,11 @@ contains
 
                         ! Use Simpon's rule to add contributions for this subinterval
                         ! Includes multiplication by total R_b integral
-                        temp_integral = y_integral * integrand_func(x, .true.)
+                        if (single_jacobi .or. mixed_jacobi) then
+                                temp_integral = y_integral * jacobi_integrand_func(x, .true.)
+                        else if (test_coords) then
+                                temp_integral = y_integral
+                        end if
 
                         if (i == 0 .or. i == n(1)) then
                                 total_integral = total_integral + temp_integral
@@ -325,7 +363,7 @@ contains
                 ! Total (R_a) integral
                 total_integral = width(1) * total_integral / 3
 
-                if (.not. is_mixed) then
+                if (single_jacobi) then
                         total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
                 end if
 
@@ -519,6 +557,11 @@ contains
 
                 real :: lims(2)
 
+                if (get_r_lims .and. get_theta_lims) then
+                        print *, "Only one coordinate flag should be set to true"
+                        stop
+                end if
+
                 if (get_r_lims) then
                         if (estimate_lims) then
                                 lims(1:2) = estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, mass_c, &
@@ -549,5 +592,47 @@ contains
                 end if
 
         end function get_limits
+
+        function get_test_limits(get_y_lims, get_z_lims, x, y) result(lims)
+
+                implicit none
+
+                real, intent(in) :: x, y
+                logical, intent(in) :: get_y_lims, get_z_lims
+
+                real :: lims(2)
+
+                if (get_y_lims .and. get_z_lims) then
+                        print *, "Only one coordinate flag should be set to true"
+                        stop
+                end if
+
+                if (get_y_lims) then
+                        ! Depends on x
+                        lims(1:2) = (/ 0., 1. - x/)
+                else if (get_z_lims) then
+                        ! Depends on x and y
+                        lims(1:2) = (/ 0., 1. - x - y /)
+                end if
+
+        end function get_test_limits
+
+        ! Returns (x+y+z)^-0.5
+        ! For 1/denom, requires adjustment for 1/0, and so a much larger n is needed
+        ! Also tested with (x+y+z)^-0.5
+        function test_integrand_func(x, y, z) result(integrand)
+
+                implicit none
+
+                real, intent(in) :: x, y, z
+                real :: integrand, denominator
+
+                denominator = sqrt(x + y + z)
+                if (denominator  < 0.00000001) then
+                        denominator =  0.00000001
+                end if
+                integrand = 1 / denominator
+
+        end function test_integrand_func
 
 end program integration
