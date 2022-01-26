@@ -215,8 +215,8 @@ contains
 
         ! Use Simpson's rule to integrate three variables
         ! The mixed_jacobi flag uses constant limits, while the single_jacobi and
-        ! test_coords flags use constant limits, defined in other functions
-        ! Otherwise the limits are dependent on previous variables
+        ! test_coords flags use limits that depend on other variables
+        ! These dependencies are defined in separate functions
         function integrate_triple_Simpson(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, &
                 mixed_jacobi, single_jacobi, test_coords) result(total_integral)
 
@@ -237,7 +237,7 @@ contains
                 end if
 
                 ! Width's of Simpson's rule subintervals for each coordinate
-                ! Still use full mixed R_a limits for single Jacobi
+                ! Still use full mixed R_a limits for single Jacobi and test coords
                 lims(1) = mixed_lims(1)
                 lims(2) = mixed_lims(2)
                 width(1) = abs(lims(2) - lims(1)) / real(n(1))
@@ -257,10 +257,10 @@ contains
                 ! Variables labelled x, y and z for simplicity
                 do i = 0, n(1)
 
-                        ! Set value for R_a (mixed and single)
+                        ! Set value for R_a (mixed and single) or x (test)
                         x = lims(1) + real(i) * width(1)
 
-                        ! Total R_b interegral for set R_a
+                        ! Total R_b, r_a or y integral for set R_a, R_a or x
                         y_integral = 0.
 
                         ! For single Jacobi, calculate r_a limits from R_a
@@ -277,10 +277,11 @@ contains
 
                         do j = 0, n(2)
 
-                                ! Set value for R_b (mixed) or r_a (single)
+                                ! Set value for R_b (mixed), r_a (single) or y (test)
                                 y = lims(3) + real(j) * width(2)
 
-                                ! Total theta_ab interegral for set R_a, R_b
+                                ! Total theta_ab, theta_a or z intergral for set
+                                ! (R_a, R_b), (R_a, r_a) or (x, y)
                                 z_integral = 0.
 
                                 ! For single Jacobi, calculate theta_a limits from R_a and r_a
@@ -298,7 +299,7 @@ contains
 
                                 do k = 0, n(3)
 
-                                        ! Set value for theta_ab (mixed) or theta_a (single)
+                                        ! Set value for theta_ab (mixed), theta_a (single) or z (test)
                                         z = lims(5) + real(k) * width(3)
 
                                         ! Use Simpson's rule to add contributions for this subinterval
@@ -318,11 +319,12 @@ contains
 
                                 end do
 
-                                ! Total theta_ab intergral for set R_a, R_b
+                                ! Total theta_ab, theta_a or z intergral for set
+                                ! (R_a, R_b), (R_a, r_a) or (x, y)
                                 z_integral = width(3) * z_integral / 3.
 
                                 ! Use Simpon's rule to add contributions for this subinterval
-                                ! Inlcudes multiplication by total theta_ab integral
+                                ! Inlcudes multiplication by total theta_ab, theta_a or z integral
                                 if (single_jacobi .or. mixed_jacobi) then
                                         temp_integral = z_integral * jacobi_integrand_func(y, .true.)
                                 else if (test_coords) then
@@ -339,11 +341,11 @@ contains
 
                         end do
 
-                        ! Total R_b integral for set R_a
+                        ! Total R_b, r_a or y integral for set R_a, R_a or x
                         y_integral = width(2) * y_integral / 3.
 
                         ! Use Simpon's rule to add contributions for this subinterval
-                        ! Includes multiplication by total R_b integral
+                        ! Includes multiplication by total R_b/r_a/y integral
                         if (single_jacobi .or. mixed_jacobi) then
                                 temp_integral = y_integral * jacobi_integrand_func(x, .true.)
                         else if (test_coords) then
@@ -360,9 +362,10 @@ contains
 
                 end do
 
-                ! Total (R_a) integral
+                ! Total (R_a, R_a or x) integral
                 total_integral = width(1) * total_integral / 3.
 
+                ! For single Jacobi coordinates, multiply by prefactor
                 if (single_jacobi) then
                         total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
                 end if
@@ -619,7 +622,10 @@ contains
 
         ! Returns (x+y+z)^-0.5
         ! For 1/denom, requires adjustment for 1/0, and so a much larger n is needed
-        ! Also tested with (x+y+z)^-0.5
+        ! Also tested with (x+y+z)^-0
+        ! Expected results:
+        !       (x+y+z)^-0.5: 0.2
+        !       (x+y+z)^0.5: 0.142857142857143
         function test_integrand_func(x, y, z) result(integrand)
 
                 implicit none
