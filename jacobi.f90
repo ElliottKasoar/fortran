@@ -8,7 +8,7 @@ program jacobi
                 test_Simpson_integral, test_coord_lims(6)
 
         ! Number of points to generate for MC integration
-        mc_n = 2000
+        mc_n = 10000
 
         ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, theta_ab_n)
         mixed_jacobi_n = (/ 50, 50, 50 /)
@@ -73,18 +73,18 @@ contains
                 mass_c = 4.
 
                 ! Sum of masses
-                mass_total = 0
+                mass_total = 0.
                 mass_total = mass_a + mass_b + mass_c
 
                 ! Internal reduced masses
-                m_a = 0
-                m_b = 0
+                m_a = 0.
+                m_b = 0.
                 m_a = mass_b * mass_c / (mass_b + mass_c)
                 m_b = mass_a * mass_c / (mass_a + mass_c)
 
                 ! Reduced channel masses
-                mu_a = 0
-                mu_b = 0
+                mu_a = 0.
+                mu_b = 0.
                 mu_a = mass_a * mass_b * mass_c / (mass_total * m_a)
                 mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
@@ -110,24 +110,24 @@ contains
                         stop
                 end if
 
-                width = abs(b - a) / n
+                width = abs(b - a) / real(n)
 
-                integral = 0
+                integral = 0.
 
                 do i = 0, n
-                        x = a + i * width
+                        x = a + real(i) * width
                         y(i) = jacobi_integrand_func(x, is_x_squared)
 
                         if (i == 0 .or. i == n) then
                                 integral = integral + y(i)
                         else if (mod(i, 2) == 0) then
-                                integral = integral + 2 * y(i)
+                                integral = integral + 2. * y(i)
                         else
-                                integral = integral + 4 * y(i)
+                                integral = integral + 4. * y(i)
                         end if
                 end do
 
-                integral = width * integral / 3
+                integral = width * integral / 3.
 
                 if (is_x_squared) then
                         !print *, "The integral of x^2 from ", a, " to ", b, " is ", integral
@@ -167,7 +167,7 @@ contains
                 real :: coord
 
                 coord = mu_a * sqrt( (R_a / M_c)**2  + (R_b / m_b)**2 &
-                        + 2 * (R_a * R_b * cos(gamma_ab) / (M_c * m_b)) )
+                        + 2. * (R_a * R_b * cos(gamma_ab) / (M_c * m_b)) )
 
         end function calculate_r_a
 
@@ -240,28 +240,28 @@ contains
                 ! Still use full mixed R_a limits for single Jacobi
                 lims(1) = mixed_lims(1)
                 lims(2) = mixed_lims(2)
-                width(1) = abs(lims(2) - lims(1)) / n(1)
+                width(1) = abs(lims(2) - lims(1)) / real(n(1))
                 if (mixed_jacobi) then
                         lims(3) = mixed_lims(3)
                         lims(4) = mixed_lims(4)
                         lims(5) = mixed_lims(5)
                         lims(6) = mixed_lims(6)
-                        width(2) = abs(lims(4) - lims(3)) / n(2)
-                        width(3) = abs(lims(6) - lims(5)) / n(3)
+                        width(2) = abs(lims(4) - lims(3)) / real(n(2))
+                        width(3) = abs(lims(6) - lims(5)) / real(n(3))
                 end if
 
-                total_integral = 0
-                temp_integral = 0
+                total_integral = 0.
+                temp_integral = 0.
 
                 ! Integrate each variable in turn, covering full limits
                 ! Variables labelled x, y and z for simplicity
                 do i = 0, n(1)
 
                         ! Set value for R_a (mixed and single)
-                        x = lims(1) + i * width(1)
+                        x = lims(1) + real(i) * width(1)
 
                         ! Total R_b interegral for set R_a
-                        y_integral = 0
+                        y_integral = 0.
 
                         ! For single Jacobi, calculate r_a limits from R_a
                         if (single_jacobi) then
@@ -273,15 +273,15 @@ contains
                                 lims(3:4) = get_test_limits(.true., .false., x, 0.)
                         end if
 
-                        width(2) = abs(lims(4) - lims(3)) / n(2)
+                        width(2) = abs(lims(4) - lims(3)) / real(n(2))
 
                         do j = 0, n(2)
 
                                 ! Set value for R_b (mixed) or r_a (single)
-                                y = lims(3) + j * width(2)
+                                y = lims(3) + real(j) * width(2)
 
                                 ! Total theta_ab interegral for set R_a, R_b
-                                z_integral = 0
+                                z_integral = 0.
 
                                 ! For single Jacobi, calculate theta_a limits from R_a and r_a
                                 if (single_jacobi) then
@@ -294,12 +294,12 @@ contains
                                         lims(5:6) = get_test_limits(.false., .true., x, y)
                                 end if
 
-                                width(3) = abs(lims(6) - lims(5)) / n(3)
+                                width(3) = abs(lims(6) - lims(5)) / real(n(3))
 
                                 do k = 0, n(3)
 
                                         ! Set value for theta_ab (mixed) or theta_a (single)
-                                        z = lims(5) + k * width(3)
+                                        z = lims(5) + real(k) * width(3)
 
                                         ! Use Simpson's rule to add contributions for this subinterval
                                         if (single_jacobi .or. mixed_jacobi) then
@@ -311,15 +311,15 @@ contains
                                         if (k == 0 .or. k == n(3)) then
                                                 z_integral = z_integral + temp_integral
                                         else if (mod(k, 2) == 0) then
-                                                z_integral = z_integral + 2 * temp_integral
+                                                z_integral = z_integral + 2. * temp_integral
                                         else
-                                                z_integral = z_integral + 4 * temp_integral
+                                                z_integral = z_integral + 4. * temp_integral
                                         end if
 
                                 end do
 
                                 ! Total theta_ab intergral for set R_a, R_b
-                                z_integral = width(3) * z_integral / 3
+                                z_integral = width(3) * z_integral / 3.
 
                                 ! Use Simpon's rule to add contributions for this subinterval
                                 ! Inlcudes multiplication by total theta_ab integral
@@ -332,15 +332,15 @@ contains
                                 if (j == 0 .or. j == n(2)) then
                                         y_integral = y_integral + temp_integral
                                 else if (mod(j, 2) == 0) then
-                                        y_integral = y_integral + 2 * temp_integral
+                                        y_integral = y_integral + 2. * temp_integral
                                 else
-                                        y_integral = y_integral + 4 * temp_integral
+                                        y_integral = y_integral + 4. * temp_integral
                                 end if
 
                         end do
 
                         ! Total R_b integral for set R_a
-                        y_integral = width(2) * y_integral / 3
+                        y_integral = width(2) * y_integral / 3.
 
                         ! Use Simpon's rule to add contributions for this subinterval
                         ! Includes multiplication by total R_b integral
@@ -353,15 +353,15 @@ contains
                         if (i == 0 .or. i == n(1)) then
                                 total_integral = total_integral + temp_integral
                         else if (mod(i, 2) == 0) then
-                                total_integral = total_integral + 2 * temp_integral
+                                total_integral = total_integral + 2. * temp_integral
                         else
-                                total_integral = total_integral + 4 * temp_integral
+                                total_integral = total_integral + 4. * temp_integral
                         end if
 
                 end do
 
                 ! Total (R_a) integral
-                total_integral = width(1) * total_integral / 3
+                total_integral = width(1) * total_integral / 3.
 
                 if (single_jacobi) then
                         total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
@@ -382,7 +382,7 @@ contains
                 temp_integral, total_integral
                 integer :: i
 
-                total_integral = 0
+                total_integral = 0.
 
                 width = (/ 0, 0, 0 /)
                 coords = (/ 0, 0, 0 /)
@@ -396,7 +396,7 @@ contains
 
                 do i = 0, n
 
-                        temp_integral = 0
+                        temp_integral = 0.
 
                         ! Generate random points in range 0 to 1
                         call random_number(coords)
@@ -438,7 +438,7 @@ contains
 
                 end do
 
-                total_integral = total_integral / n
+                total_integral = total_integral / real(n)
 
                 total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
 
@@ -454,7 +454,7 @@ contains
 
                 real :: total_func, F
 
-                total_func = 0
+                total_func = 0.
 
                 ! Function being integrated F(x,y,z)
                 F = 1
@@ -523,11 +523,11 @@ contains
                         do i = 1, n
 
                                 ! Evenly sample entire range of each coord
-                                mixed_coords(2) = mixed_lims(3) + (i-1) * width(2) / n
+                                mixed_coords(2) = mixed_lims(3) + (i-1) * width(2) / real(n)
 
                                 do j = 1, n
                                         ! Evenly sample entire range of each coord
-                                        mixed_coords(3) = mixed_lims(5) + (j-1) * width(3) / n
+                                        mixed_coords(3) = mixed_lims(5) + (j-1) * width(3) / real(n)
 
                                         if (estimating_r_a) then
                                                 test_coord(j + (i-1)*(n-1)) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
