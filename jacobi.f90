@@ -149,7 +149,7 @@ contains
                 real :: integrand
 
                 if (is_x_squared) then
-                        integrand = x ** 2
+                        integrand = x**2.
                 else
                         integrand = sin(x)
                 end if
@@ -166,7 +166,7 @@ contains
                 ! coord = r_a
                 real :: coord
 
-                coord = mu_a * sqrt( (R_a / M_c)**2  + (R_b / m_b)**2 &
+                coord = mu_a * sqrt( (R_a / M_c)**2.  + (R_b / m_b)**2. &
                         + 2. * (R_a * R_b * cos(gamma_ab) / (M_c * m_b)) )
 
         end function calculate_r_a
@@ -367,7 +367,7 @@ contains
 
                 ! For single Jacobi coordinates, multiply by prefactor
                 if (single_jacobi) then
-                        total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
+                        total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
                 end if
 
         end function integrate_triple_Simpson
@@ -425,25 +425,14 @@ contains
                         coords(3) = single_lims(5) + coords(3) * width(3)
 
                         temp_integral = evaluate_function(coords(1), coords(2), coords(3))
-
-                        if (total_integral > 1000000000) then
-                                print *, "Function evaluated: ", temp_integral
-                        end if
                         temp_integral = width(1) * width(2) * width(3) * temp_integral
-
-                        if (total_integral > 1000000000) then
-                                print *, "Coords: ", coords
-                                print *, "Widths: ", width
-                                print *, "Temp int: ", temp_integral
-                        end if
-
                         total_integral = total_integral + temp_integral
 
                 end do
 
                 total_integral = total_integral / real(n)
 
-                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3/2) * total_integral
+                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
 
         end function integrate_MC
 
@@ -460,9 +449,9 @@ contains
                 total_func = 0.
 
                 ! Function being integrated F(x,y,z)
-                F = 1
+                F = 1.
                 ! Multiply F by integration variables in integral 
-                total_func = x**2 * y**2 * sin(z) * F
+                total_func = x**2. * y**2. * sin(z) * F
                 ! total_func = sqrt(x+y+z)
 
                 ! print *, "R_a, r_a, gamma_a: ", x, y, z
@@ -526,17 +515,17 @@ contains
                         do i = 1, n
 
                                 ! Evenly sample entire range of each coord
-                                mixed_coords(2) = mixed_lims(3) + (i-1) * width(2) / real(n)
+                                mixed_coords(2) = mixed_lims(3) + (real(i-1) * width(2) / real(n))
 
                                 do j = 1, n
                                         ! Evenly sample entire range of each coord
-                                        mixed_coords(3) = mixed_lims(5) + (j-1) * width(3) / real(n)
+                                        mixed_coords(3) = mixed_lims(5) + (real(j-1) * width(3) / real(n))
 
                                         if (estimating_r_a) then
-                                                test_coord(j + (i-1)*(n-1)) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
+                                                test_coord(j + (i-1) * (n-1)) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
                                                 mixed_coords(2), m_b, mixed_coords(3))
                                         else if (estimating_theta_a) then
-                                                test_coord(j + (i-1)*(n-1)) = calculate_theta_a(small_r_a, mu_a, &
+                                                test_coord(j + (i-1) * (n-1)) = calculate_theta_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(2), m_b, mixed_coords(3))
                                         end if
 
