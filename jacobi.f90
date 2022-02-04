@@ -225,7 +225,16 @@ contains
 
                 ! coord = theta_a
                 real :: cos_numerator, cos_denominator, cos_coord, coord, temp_R_b_1, temp_R_b_2, &
-                        R_b_over_m_b
+                        R_b_over_m_b, rand_num
+
+                logical :: positive_root
+
+                call random_number(rand_num)
+                if (rand_num > 0.5) then
+                        positive_root = .true.
+                else
+                        positive_root = .false.
+                end if
 
                 cos_denominator = small_r_a
 
@@ -244,13 +253,27 @@ contains
                         return
                 else
                         temp_R_b_2 = - (R_a / M_c) * cos(gamma_ab)
-                        R_b_over_m_b = temp_R_b_2 + sqrt(temp_R_b_1)
+                        if (positive_root) then
+                                R_b_over_m_b = temp_R_b_2 + sqrt(temp_R_b_1)
+                        else
+                                R_b_over_m_b = temp_R_b_2 - sqrt(temp_R_b_1)
+                        end if
                 end if
 
                 ! Check R_b within valid limits
                 if ( (R_b_over_m_b < lims(3) / m_b) .or. (R_b_over_m_b > lims(4) / m_b) ) then
-                        coord = -100.
-                        return
+
+                        ! Try opposite root before aborting
+                        if (positive_root) then
+                                R_b_over_m_b = temp_R_b_2 - sqrt(temp_R_b_1)
+                        else
+                                R_b_over_m_b = temp_R_b_2 + sqrt(temp_R_b_1)
+                        end if
+
+                        if ( (R_b_over_m_b < lims(3) / m_b) .or. (R_b_over_m_b > lims(4) / m_b) ) then
+                                coord = -100.
+                                return
+                        end if
                 end if
 
                 cos_numerator = - mu_a * ( (R_a / M_c) + R_b_over_m_b * cos(gamma_ab) )
@@ -359,7 +382,7 @@ contains
 
                                         ! If unable to find limits, estimate as previous?
                                         if (lims(5) == 0. .and. lims(6) == 0. .and. (i+j+k)>0) then
-                                                lims(5:6) = prev_lims
+                                                ! lims(5:6) = prev_lims
                                                 count = count + 1
                                         end if
                                 end if
@@ -547,7 +570,7 @@ contains
                 real, intent(in) :: R_a, mixed_lims(6), mu_a, m_b, mass_c, small_r_a
                 logical, intent(in) :: estimating_r_a, estimating_theta_a
 
-                real :: test_coord(100000), mixed_coords(3), width(3), single_lims(2), test_r_a, temp_theta
+                real :: test_coord(10000), mixed_coords(3), width(3), single_lims(2), test_r_a, temp_theta
                 integer :: i, j, n, count
                 logical :: random_range
 
