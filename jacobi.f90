@@ -343,6 +343,10 @@ contains
                 ! Variables labelled x, y and z for simplicity
                 do i = 0, n(1)
 
+                        if (mod((100*i/n(1)), 20) == 0) then
+                                print *, "Progress... ", (100*i/n(1)), "%"
+                        end if
+
                         ! Set value for R_a (mixed and single) or x (test)
                         x = lims(1) + real(i) * width(1)
 
