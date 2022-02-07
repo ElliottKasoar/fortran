@@ -14,7 +14,7 @@ program jacobi
         mixed_jacobi_n = (/ 50, 50, 50 /)
 
         ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, theta_a_n)
-        single_jacobi_n = (/ 50, 50, 50 /)
+        single_jacobi_n = (/ 100, 100, 100 /)
 
         ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
         test_coord_n = (/ 1000, 1000, 1000 /)
@@ -311,8 +311,12 @@ contains
                 logical, intent(in) :: mixed_jacobi, single_jacobi, test_coords
 
                 real :: width(3), x, y, z, lims(6), temp_integral, z_integral, y_integral, &
-                        total_integral, prev_lims(2)
+                        total_integral, prev_lims(2), r_lims(n(1)+1, 3), &
+                        theta_lims(n(1)+1, n(2)+1, 4)
                 integer :: i, j, k, count
+                logical :: save_lims
+
+                save_lims = .true.
 
                 if ((mixed_jacobi .and. single_jacobi) .or. (mixed_jacobi .and. test_coords) &
                         .or. (single_jacobi .and. test_coords)) then
@@ -363,6 +367,11 @@ contains
                                 lims(3:4) = get_test_limits(.true., .false., x, 0.)
                         end if
 
+                        if (save_lims) then
+                                r_lims(i+1, 1) = x
+                                r_lims(i+1, 2:3) = lims(3:4)
+                        end if
+
                         width(2) = abs(lims(4) - lims(3)) / real(n(2))
 
                         do j = 0, n(2)
@@ -388,6 +397,12 @@ contains
                                         if (lims(5) == 0. .and. lims(6) == 0. .and. (i+j+k)>0) then
                                                 ! lims(5:6) = prev_lims
                                                 count = count + 1
+                                        end if
+
+                                        if (save_lims) then
+                                                theta_lims(i+1, j+1, 1) = x
+                                                theta_lims(i+1, j+1, 2) = y
+                                                theta_lims(i+1, j+1, 3:4) = lims(5:6)
                                         end if
                                 end if
 
@@ -474,6 +489,16 @@ contains
                 end if
 
                 print *, "Number of limits not found: ", count
+
+                if (single_jacobi .and. save_lims) then
+                        open (unit=42, file='outputs/r_lims', form='unformatted')
+                        write(42) r_lims
+                        close (unit=42)
+
+                        open (unit=43, file='outputs/theta_lims', form='unformatted')
+                        write(43) theta_lims
+                        close (unit=43)
+                end if
 
         end function integrate_triple_Simpson
 
