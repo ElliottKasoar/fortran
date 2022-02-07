@@ -601,7 +601,7 @@ contains
                 count = 0
 
                 if (random_range) then
-                        do i = 1, n-1
+                        do i = 1, n
 
                                 ! Generate random R_b and gamma_ab that change each iteration
                                 call random_number(mixed_coords(2:3))
@@ -644,7 +644,7 @@ contains
 
                         end do
                 else
-                        do i = 1, n-1
+                        do i = 1, n
 
                                 ! Evenly sample entire range of each coord
                                 mixed_coords(2) = mixed_lims(3) + (real(i-1) * width(2) / real(n))
