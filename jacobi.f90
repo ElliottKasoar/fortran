@@ -1,11 +1,17 @@
 program jacobi
 
+        use mpi
+
         implicit none
         integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
         real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, &
                 mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
                 single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
                 test_Simpson_integral, test_coord_lims(6)
+
+        ! MPI variables
+        integer :: comm, rank, size, source, tag, ierr
+        integer, dimension(MPI_STATUS_SIZE) :: status
 
         ! Number of points to generate for MC integration
         mc_n = 10000
