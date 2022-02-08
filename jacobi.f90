@@ -3,6 +3,7 @@ program jacobi
         use mpi
 
         implicit none
+
         integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
         real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, &
                 mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
@@ -10,8 +11,22 @@ program jacobi
                 test_Simpson_integral, test_coord_lims(6)
 
         ! MPI variables
-        integer :: comm, rank, size, source, tag, ierr
+        integer :: comm, rank, comm_size, source, tag, ierr
         integer, dimension(MPI_STATUS_SIZE) :: status
+        double precision :: tstart, tstop, tdiff
+
+        ! Initialise MPI
+        comm = MPI_COMM_WORLD
+        call MPI_Init(ierr)
+
+        ! Line up at the start line
+        call MPI_Barrier(comm, ierr)
+
+        ! Fire the gun and start the clock
+        tstart = MPI_Wtime()
+
+        call MPI_Comm_rank(comm, rank, ierr)
+        call MPI_Comm_size(comm, comm_size, ierr)
 
         ! Number of points to generate for MC integration
         mc_n = 10000
@@ -33,22 +48,24 @@ program jacobi
         test_coord_lims = (/ 0., 1., 0., 1., 0., 1. /)
 
         ! Calculate separable integrals for R_a, R_b and theta_ab using Simpson's rule
-        R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
-                mixed_jacobi_lims(2), .true.)
-        R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
-                mixed_jacobi_lims(4), .true.)
-        theta_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), mixed_jacobi_lims(5), &
-                mixed_jacobi_lims(6), .false.)
+        if (rank == 0) then
+                R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
+                        mixed_jacobi_lims(2), .true.)
+                R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
+                        mixed_jacobi_lims(4), .true.)
+                theta_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
+                        mixed_jacobi_lims(5), mixed_jacobi_lims(6), .false.)
 
-        ! Integrals are separable so multiply for total integral
-        mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
-        print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
+                ! Integrals are separable so multiply for total integral
+                mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
+                print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
 
-        ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
-        mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, &
-                mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false.)
-        print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
-                mixed_Simpson_integral
+                ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
+                mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, &
+                mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false.)
+                print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
+                        mixed_Simpson_integral
+        end if
 
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
@@ -66,6 +83,17 @@ program jacobi
         ! test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
         !         mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true.)
         ! print *, "Test integral using Simpson's rule = ", test_Simpson_integral
+
+        !  Stop the clock
+        tstop = MPI_Wtime()
+
+        ! Measure and print time
+        if (rank == 0) then
+                tdiff = tstop - tstart
+                print *, "Integration time: ", tdiff
+        end if
+
+        call MPI_Finalize(ierr)
 
 contains
 
@@ -317,9 +345,9 @@ contains
                 logical, intent(in) :: mixed_jacobi, single_jacobi, test_coords
 
                 real :: width(3), x, y, z, lims(6), temp_integral, z_integral, y_integral, &
-                        total_integral, prev_lims(2), r_lims(n(1)+1, 3), &
+                        partial_integral, total_integral, prev_lims(2), r_lims(n(1)+1, 3), &
                         theta_lims(n(1)+1, n(2)+1, 4)
-                integer :: i, j, k, count
+                integer :: i, j, k, partial_count, count, imin, imax
                 logical :: save_lims
 
                 save_lims = .true.
@@ -344,14 +372,23 @@ contains
                         width(3) = abs(lims(6) - lims(5)) / real(n(3))
                 end if
 
+                partial_integral = 0.
                 total_integral = 0.
                 temp_integral = 0.
 
+                partial_count = 0
                 count = 0
+
+                imin = rank * n(1) / comm_size
+                if (rank == comm_size - 1) then
+                        imax = n(1)
+                else
+                        imax = -1 + (rank+1) * n(1) / comm_size
+                end if
 
                 ! Integrate each variable in turn, covering full limits
                 ! Variables labelled x, y and z for simplicity
-                do i = 0, n(1)
+                do i = imin, imax
 
                         if (mod((100*i/n(1)), 20) == 0) then
                                 print *, "Progress... ", (100*i/n(1)), "%"
@@ -402,7 +439,7 @@ contains
                                         ! If unable to find limits, estimate as previous?
                                         if (lims(5) == 0. .and. lims(6) == 0. .and. (i+j+k)>0) then
                                                 ! lims(5:6) = prev_lims
-                                                count = count + 1
+                                                partial_count = partial_count + 1
                                         end if
 
                                         if (save_lims) then
@@ -477,33 +514,39 @@ contains
                         end if
 
                         if (i == 0 .or. i == n(1)) then
-                                total_integral = total_integral + temp_integral
+                                partial_integral = partial_integral + temp_integral
                         else if (mod(i, 2) == 0) then
-                                total_integral = total_integral + 2. * temp_integral
+                                partial_integral = partial_integral + 2. * temp_integral
                         else
-                                total_integral = total_integral + 4. * temp_integral
+                                partial_integral = partial_integral + 4. * temp_integral
                         end if
 
                 end do
 
-                ! Total (R_a, R_a or x) integral
-                total_integral = width(1) * total_integral / 3.
+                ! Sum integrals for all processes
+                call MPI_Reduce(partial_integral, total_integral, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
+                call MPI_Reduce(partial_count, count, 1, MPI_INT, MPI_SUM, 0, comm, ierr)
 
-                ! For single Jacobi coordinates, multiply by prefactor
-                if (single_jacobi) then
-                        total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
-                end if
+                if (rank == 0) then
+                        ! Total (R_a, R_a or x) integral
+                        total_integral = width(1) * total_integral / 3.
 
-                print *, "Number of limits not found: ", count
+                        ! For single Jacobi coordinates, multiply by prefactor
+                        if (single_jacobi) then
+                                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
+                        end if
 
-                if (single_jacobi .and. save_lims) then
-                        open (unit=42, file='outputs/r_lims', form='unformatted')
-                        write(42) r_lims
-                        close (unit=42)
+                        print *, "Number of limits not found: ", count
 
-                        open (unit=43, file='outputs/theta_lims', form='unformatted')
-                        write(43) theta_lims
-                        close (unit=43)
+                        if (single_jacobi .and. save_lims) then
+                                open (unit=42, file='outputs/r_lims', form='unformatted')
+                                write(42) r_lims
+                                close (unit=42)
+
+                                open (unit=43, file='outputs/theta_lims', form='unformatted')
+                                write(43) theta_lims
+                                close (unit=43)
+                        end if
                 end if
 
         end function integrate_triple_Simpson
