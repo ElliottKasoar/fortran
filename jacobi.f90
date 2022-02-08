@@ -11,8 +11,8 @@ program jacobi
                 test_Simpson_integral, test_coord_lims(6)
 
         ! MPI variables
-        integer :: comm, rank, comm_size, source, tag, ierr
-        integer, dimension(MPI_STATUS_SIZE) :: status
+        integer :: comm, rank, comm_size, source, tag, ierr, group, sub_group, sub_ranks(1), &
+                sub_comm
         double precision :: tstart, tstop, tdiff
 
         ! Initialise MPI
@@ -27,6 +27,12 @@ program jacobi
 
         call MPI_Comm_rank(comm, rank, ierr)
         call MPI_Comm_size(comm, comm_size, ierr)
+
+        ! Keep only process 0 in the new group and create new comm
+        sub_ranks(1) = 0
+        call MPI_Comm_group(comm, group, ierr);
+        call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
+        call MPI_Comm_create(MPI_COMM_WORLD, sub_group, sub_comm, ierr)
 
         ! Number of points to generate for MC integration
         mc_n = 10000
@@ -62,7 +68,7 @@ program jacobi
 
                 ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
                 mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, &
-                mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false.)
+                mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false., sub_comm)
                 print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
                         mixed_Simpson_integral
         end if
@@ -70,18 +76,21 @@ program jacobi
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
+        call MPI_Barrier(comm, ierr)
+
         ! Calculate integral for R_a, r_a and theta_a using Simpson's rule on each in turn
         single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
-                mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false.)
-        print *, "Single Jacobi integral using Simpson's rule = ", single_Simpson_integral
-
+                mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false., comm)
+        if (rank == 0) then
+                print *, "Single Jacobi integral using Simpson's rule = ", single_Simpson_integral
+        end if
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
         ! single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
         ! print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
 
         ! Calculate integral for x, y and z using Simpson's rule on each in turn
         ! test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
-        !         mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true.)
+        !         mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true., sub_comm)
         ! print *, "Test integral using Simpson's rule = ", test_Simpson_integral
 
         !  Stop the clock
@@ -336,7 +345,7 @@ contains
         ! test_coords flags use limits that depend on other variables
         ! These dependencies are defined in separate functions
         function integrate_triple_Simpson(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, &
-                mixed_jacobi, single_jacobi, test_coords) result(total_integral)
+                mixed_jacobi, single_jacobi, test_coords, sub_comm) result(total_integral)
 
                 implicit none
 
@@ -344,13 +353,21 @@ contains
                 integer, intent(in) :: n(3)
                 logical, intent(in) :: mixed_jacobi, single_jacobi, test_coords
 
+                ! MPI variables
+                integer, intent(in) :: sub_comm
+
                 real :: width(3), x, y, z, lims(6), temp_integral, z_integral, y_integral, &
                         partial_integral, total_integral, prev_lims(2), r_lims(n(1)+1, 3), &
                         theta_lims(n(1)+1, n(2)+1, 4)
-                integer :: i, j, k, partial_count, count, imin, imax
+                integer :: i, j, k, partial_count, count, imin, imax, progress
                 logical :: save_lims
 
+                ! MPI variables
+                integer :: sub_comm_size, ierr
+
                 save_lims = .true.
+
+                call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
 
                 if ((mixed_jacobi .and. single_jacobi) .or. (mixed_jacobi .and. test_coords) &
                         .or. (single_jacobi .and. test_coords)) then
@@ -379,19 +396,21 @@ contains
                 partial_count = 0
                 count = 0
 
-                imin = rank * n(1) / comm_size
-                if (rank == comm_size - 1) then
+                imin = rank * n(1) / sub_comm_size
+                if (rank == sub_comm_size - 1) then
                         imax = n(1)
                 else
-                        imax = -1 + (rank+1) * n(1) / comm_size
+                        imax = -1 + (rank+1) * n(1) / sub_comm_size
                 end if
-
+                ! print *, "Comm size", sub_comm_size
+                ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
                 ! Integrate each variable in turn, covering full limits
                 ! Variables labelled x, y and z for simplicity
                 do i = imin, imax
 
-                        if (mod((100*i/n(1)), 20) == 0) then
-                                print *, "Progress... ", (100*i/n(1)), "%"
+                        progress = 100 * (i - imin) / (imax - imin)
+                        if (mod(progress, 20) == 0) then
+                                print *, "On rank", rank, "...Progress... ", progress, "%"
                         end if
 
                         ! Set value for R_a (mixed and single) or x (test)
@@ -484,7 +503,7 @@ contains
                                 z_integral = width(3) * z_integral / 3.
 
                                 ! Use Simpon's rule to add contributions for this subinterval
-                                ! Inlcudes multiplication by total theta_ab, theta_a or z integral
+                                ! Includes multiplication by total theta_ab, theta_a or z integral
                                 if (single_jacobi .or. mixed_jacobi) then
                                         temp_integral = z_integral * &
                                         jacobi_integrand_func(y, .true.)
@@ -524,8 +543,8 @@ contains
                 end do
 
                 ! Sum integrals for all processes
-                call MPI_Reduce(partial_integral, total_integral, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
-                call MPI_Reduce(partial_count, count, 1, MPI_INT, MPI_SUM, 0, comm, ierr)
+                call MPI_Reduce(partial_integral, total_integral, 1, MPI_REAL, MPI_SUM, 0, sub_comm, ierr)
+                call MPI_Reduce(partial_count, count, 1, MPI_INT, MPI_SUM, 0, sub_comm, ierr)
 
                 if (rank == 0) then
                         ! Total (R_a, R_a or x) integral
@@ -648,7 +667,7 @@ contains
                 real, intent(in) :: R_a, mixed_lims(6), mu_a, m_b, mass_c, small_r_a
                 logical, intent(in) :: estimating_r_a, estimating_theta_a
 
-                real :: test_coord(10000), mixed_coords(3), width(3), single_lims(2), test_r_a, temp_theta
+                real :: test_coord(100000), mixed_coords(3), width(3), single_lims(2), test_r_a, temp_theta
                 integer :: i, j, n, count
                 logical :: random_range
 
