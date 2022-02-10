@@ -11,8 +11,7 @@ program jacobi
                 test_Simpson_integral, test_coord_lims(6)
 
         ! MPI variables
-        integer :: comm, rank, comm_size, source, tag, ierr, group, sub_group, sub_ranks(1), &
-                sub_comm
+        integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
         double precision :: tstart, tstop, tdiff
 
         ! Initialise MPI
@@ -38,17 +37,17 @@ program jacobi
         mc_n = 10000
 
         ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, theta_ab_n)
-        mixed_jacobi_n = (/ 50, 50, 50 /)
+        mixed_jacobi_n = (/ 200, 200, 200 /)
 
         ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, theta_a_n)
-        single_jacobi_n = (/ 100, 100, 100 /)
+        single_jacobi_n = (/ 200, 200, 200 /)
 
         ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
         test_coord_n = (/ 1000, 1000, 1000 /)
 
         ! Limits of integration (R_a_min, R_a_max, R_b_min, R_b_max, theta_ab_min, thata_ab_max)
         ! Note: 4.*atan(1.) = pi
-        mixed_jacobi_lims = (/ 0., 5., 0., 7., 0., 4.*atan(1.) /)
+        mixed_jacobi_lims = (/ 0., 3., 0., 5., 0., 4.*atan(1.) /)
 
         ! Limits of integration (x_min, x_max, y_min, y_max, z_min, z_max)
         test_coord_lims = (/ 0., 1., 0., 1., 0., 1. /)
@@ -161,7 +160,7 @@ contains
 
                 do i = 0, n
                         x = a + real(i) * width
-                        y(i) = jacobi_integrand_func(x, is_x_squared)
+                        y(i) = mixed_jacobi_integrand_func(x, is_x_squared)
 
                         if (i == 0 .or. i == n) then
                                 integral = integral + y(i)
@@ -174,17 +173,11 @@ contains
 
                 integral = width * integral / 3.
 
-                if (is_x_squared) then
-                        !print *, "The integral of x^2 from ", a, " to ", b, " is ", integral
-                else
-                        !print *, "The integral of sin(x) from ", a, " to ", b, " is ", integral
-                end if
-
         end function integrate_single_Simpson
 
 
-        ! Returns either x^2 or sin(x) based on flag passed
-        function jacobi_integrand_func(x, is_x_squared) result(integrand)
+        ! Returns either x^4 or sin(x)cos^2(x) based on flag passed
+        function mixed_jacobi_integrand_func(x, is_x_squared) result(integrand)
 
                 implicit none
 
@@ -194,12 +187,49 @@ contains
                 real :: integrand
 
                 if (is_x_squared) then
-                        integrand = x**2.
+                        integrand = x**2. * x**2.
                 else
-                        integrand = sin(x)
+                        integrand = sin(x) * cos(x)**2.
                 end if
 
-        end function jacobi_integrand_func
+        end function mixed_jacobi_integrand_func
+
+
+        ! Returns either x^2 y^2 sin(z)
+        function single_jacobi_integrand_func(x, y, z, mu_a, M_c, m_b) result(integrand)
+
+                implicit none
+
+                real, intent(in) :: x, y, z, mu_a, M_c, m_b
+
+                real :: integrand, integrand_volume, integrand_R_a, integrand_R_b, &
+                        integrand_gamma_ab
+
+                ! Volume component to be integrated
+                integrand_volume = x**2. * y**2. * sin(z)
+
+                ! Function to be integrated:
+                ! R_a^2
+                integrand_R_a = x**2.
+
+                ! R_b^2
+                integrand_R_b = m_b**2. * ( (x / M_c)**2. + (y / mu_a)**2. + &
+                        2. * x * y * cos(z) / (mu_a * M_c) )
+
+                ! cos(gamma_ab)^2
+                ! Undefined for R_a or R_b = 0, but integrand = 0 anyway
+                if (integrand_R_a == 0. .or. integrand_R_b == 0.) then
+                        integrand_gamma_ab = 0.
+                else
+                        integrand_gamma_ab = (m_b / sqrt(integrand_R_b)) * - &
+                                ( (y * cos(z) / mu_a) + x / M_c )
+
+                        integrand_gamma_ab = integrand_gamma_ab**2.
+                end if
+
+                integrand = integrand_volume * integrand_R_a * integrand_R_b * integrand_gamma_ab
+
+        end function single_jacobi_integrand_func
 
 
         ! Calculate r_a from R_a, R_b and gamma_ab
@@ -357,13 +387,15 @@ contains
                 integer, intent(in) :: sub_comm
 
                 real :: width(3), x, y, z, lims(6), temp_integral, z_integral, y_integral, &
-                        partial_integral, total_integral, prev_lims(2), r_lims(n(1)+1, 3), &
-                        theta_lims(n(1)+1, n(2)+1, 4)
-                integer :: i, j, k, partial_count, count, imin, imax, progress
+                        partial_integral, total_integral, prev_lims(2), r_lims(3, n(1)+1), &
+                        theta_lims(4, n(1)+1, n(2)+1)
+                integer :: i, j, k, partial_count, count, imin, imax, progress, num_r_values, &
+                        num_theta_values
                 logical :: save_lims
 
                 ! MPI variables
-                integer :: sub_comm_size, ierr
+                integer :: sub_comm_size, ierr, request_1, request_2, r_tag, theta_tag, &
+                        recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
 
                 save_lims = .true.
 
@@ -400,7 +432,7 @@ contains
                 if (rank == sub_comm_size - 1) then
                         imax = n(1)
                 else
-                        imax = -1 + (rank+1) * n(1) / sub_comm_size
+                        imax = -1 + (rank + 1) * n(1) / sub_comm_size
                 end if
                 ! print *, "Comm size", sub_comm_size
                 ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
@@ -430,8 +462,8 @@ contains
                         end if
 
                         if (save_lims) then
-                                r_lims(i+1, 1) = x
-                                r_lims(i+1, 2:3) = lims(3:4)
+                                r_lims(1, i+1) = x
+                                r_lims(2:3, i+1) = lims(3:4)
                         end if
 
                         width(2) = abs(lims(4) - lims(3)) / real(n(2))
@@ -462,9 +494,9 @@ contains
                                         end if
 
                                         if (save_lims) then
-                                                theta_lims(i+1, j+1, 1) = x
-                                                theta_lims(i+1, j+1, 2) = y
-                                                theta_lims(i+1, j+1, 3:4) = lims(5:6)
+                                                theta_lims(1, i+1, j+1) = x
+                                                theta_lims(2, i+1, j+1) = y
+                                                theta_lims(3:4, i+1, j+1) = lims(5:6)
                                         end if
                                 end if
 
@@ -482,8 +514,12 @@ contains
 
                                         ! Use Simpson's rule to add contributions
                                         ! for this subinterval
-                                        if (single_jacobi .or. mixed_jacobi) then
-                                                temp_integral = jacobi_integrand_func(z, .false.)
+                                        if (mixed_jacobi) then
+                                                temp_integral = mixed_jacobi_integrand_func(z, &
+                                                        .false.)
+                                        else if (single_jacobi) then
+                                                temp_integral = single_jacobi_integrand_func(x, &
+                                                        y, z, mu_a, mass_c, m_b)
                                         else if (test_coords) then
                                                 temp_integral = test_integrand_func(x, y, z)
                                         end if
@@ -504,9 +540,11 @@ contains
 
                                 ! Use Simpon's rule to add contributions for this subinterval
                                 ! Includes multiplication by total theta_ab, theta_a or z integral
-                                if (single_jacobi .or. mixed_jacobi) then
+                                if (mixed_jacobi) then
                                         temp_integral = z_integral * &
-                                        jacobi_integrand_func(y, .true.)
+                                                mixed_jacobi_integrand_func(y, .true.)
+                                else if (single_jacobi) then
+                                        temp_integral = z_integral
                                 else if (test_coords) then
                                         temp_integral = z_integral
                                 end if
@@ -526,8 +564,10 @@ contains
 
                         ! Use Simpon's rule to add contributions for this subinterval
                         ! Includes multiplication by total R_b/r_a/y integral
-                        if (single_jacobi .or. mixed_jacobi) then
-                                temp_integral = y_integral * jacobi_integrand_func(x, .true.)
+                        if (mixed_jacobi) then
+                                temp_integral = y_integral * mixed_jacobi_integrand_func(x, .true.)
+                        else if (single_jacobi) then
+                                temp_integral = y_integral
                         else if (test_coords) then
                                 temp_integral = y_integral
                         end if
@@ -542,9 +582,48 @@ contains
 
                 end do
 
-                ! Sum integrals for all processes
-                call MPI_Reduce(partial_integral, total_integral, 1, MPI_REAL, MPI_SUM, 0, sub_comm, ierr)
+                ! Sum integrals from all processes
+                call MPI_Reduce(partial_integral, total_integral, 1, MPI_REAL, MPI_SUM, 0, &
+                        sub_comm, ierr)
                 call MPI_Reduce(partial_count, count, 1, MPI_INT, MPI_SUM, 0, sub_comm, ierr)
+
+                ! Send limits to rank 0 to save
+                r_tag = 0
+                theta_tag = 1
+                if (single_jacobi .and. save_lims) then
+                        if (rank == 0) then
+                                ! Receive from all other ranks
+                                do i = 1, sub_comm_size - 1
+                                        imin = i * n(1) / sub_comm_size
+                                        if (i == sub_comm_size - 1) then
+                                                imax = n(1)
+                                        else
+                                                imax = -1 + (i + 1) * n(1) / sub_comm_size
+                                        end if
+
+                                        num_r_values = (imax - imin + 1) * 3
+                                        call MPI_Recv(r_lims(:, imin+1:imax+1), num_r_values, &
+                                                MPI_REAL, i, r_tag, sub_comm, recv_status_1, ierr)
+
+                                        num_theta_values = (imax - imin + 1) * 4 * (n(2) + 1)
+                                        call MPI_Recv(theta_lims(:, imin+1:imax+1, :), &
+                                                num_theta_values, MPI_REAL, i, theta_tag, &
+                                                sub_comm, recv_status_2, ierr)
+                                end do
+                        else
+                                ! All non-zero ranks send to rank 0
+                                num_r_values = (imax - imin + 1) * 3
+                                call MPI_Ssend(r_lims(:, imin+1:imax+1), num_r_values, MPI_REAL, &
+                                        0, r_tag, sub_comm, request_1, ierr)
+
+                                num_theta_values = (imax - imin + 1) * 4 * (n(2) + 1)
+                                call MPI_Ssend(theta_lims(:, imin+1:imax+1, :), num_theta_values, &
+                                        MPI_REAL, 0, theta_tag, sub_comm, request_2, ierr)
+                        end if
+                end if
+
+                ! All sends/receives complete
+                call MPI_Barrier(sub_comm, ierr)
 
                 if (rank == 0) then
                         ! Total (R_a, R_a or x) integral
@@ -552,7 +631,8 @@ contains
 
                         ! For single Jacobi coordinates, multiply by prefactor
                         if (single_jacobi) then
-                                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
+                                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * &
+                                        total_integral
                         end if
 
                         print *, "Number of limits not found: ", count
@@ -561,7 +641,6 @@ contains
                                 open (unit=42, file='outputs/r_lims', form='unformatted')
                                 write(42) r_lims
                                 close (unit=42)
-
                                 open (unit=43, file='outputs/theta_lims', form='unformatted')
                                 write(43) theta_lims
                                 close (unit=43)
@@ -646,7 +725,7 @@ contains
 
                 total_func = 0.
 
-                ! Function being integrated F(x,y,z)
+                ! Function being integrated F(x, y, z)
                 F = 1.
                 ! Multiply F by integration variables in integral
                 total_func = x**2. * y**2. * sin(z) * F
