@@ -177,6 +177,7 @@ contains
 
 
         ! Returns either x^4 or sin(x)cos^2(x) based on flag passed
+        ! x = R_a, R_b or gamma_ab
         function mixed_jacobi_integrand_func(x, is_x_squared) result(integrand)
 
                 implicit none
@@ -195,7 +196,9 @@ contains
         end function mixed_jacobi_integrand_func
 
 
-        ! Returns either x^2 y^2 sin(z)
+        ! Returns R_a^2 R_b^2 cos^2(gamma_ab) R_a^2 r_a^2 sin(gamma_a)
+        ! R_b and gamma_ab are rewritten in terms of R_a, r_a and gamma_a
+        ! R_a = x, r_a = y and gamma_a = z
         function single_jacobi_integrand_func(x, y, z, mu_a, M_c, m_b) result(integrand)
 
                 implicit none
@@ -218,7 +221,8 @@ contains
 
                 ! cos(gamma_ab)^2
                 ! Undefined for R_a or R_b = 0, but integrand = 0 anyway
-                if (integrand_R_a == 0. .or. integrand_R_b == 0.) then
+                ! R_a^2 and R_b^2 must also be positive, so avoid rounding errors
+                if (integrand_R_a <= 0. .or. integrand_R_b <= 0.) then
                         integrand_gamma_ab = 0.
                 else
                         integrand_gamma_ab = (m_b / sqrt(integrand_R_b)) * - &
