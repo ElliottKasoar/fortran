@@ -441,7 +441,8 @@ contains
                 do i = imin, imax
 
                         progress = 100 * (i - imin) / (imax - imin)
-                        if (mod(progress, 20) == 0) then
+                        ! if (mod((imax-imin), 5) == 0) then
+                        if (mod((i - imin), (imax - imin + 1) / 5) == 0 .or. i == imax) then
                                 print *, "On rank", rank, "...Progress... ", progress, "%"
                         end if
 
