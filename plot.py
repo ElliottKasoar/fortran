@@ -10,12 +10,13 @@ f2 = FortranFile('outputs/theta_lims', 'r')
 a = f1.read_reals(dtype='float32')
 b = f2.read_reals(dtype='float32')
 
-num_values_1 = len(a)//3
+num_values_a = len(a)//3
 
-# Data in the form (i+1, x)
+# Data came from the form (x, i+1)
+# Data read in as linear array, varying by 2nd index first, so must transform
 # x = 0 corresponds to R_a
 # x = 1, 2 correspond to r_a_min, r_a_max
-a = np.reshape(a, [3, num_values_1])
+a = np.reshape(a, [num_values_a, 3]).T
 
 # Plot R_a against r_a (min, max)
 fig0, ax0 = plt.subplots()
@@ -24,50 +25,50 @@ ax0.scatter(a[0, :], a[2, :], label=r'$r_{\alpha, max}$', color='tab:red', linew
 ax0.set_xlabel(r'$R_\alpha$')
 ax0.set_ylabel(r'$r_\alpha$')
 ax0.legend()
-ax0.set_ylim([-0.5, 10.5])
+# ax0.set_ylim([-0.5, 10.5])
 ax0.xaxis.get_ticklocs(minor=True)
 ax0.minorticks_on()
 fig0.savefig('figures/R_a_r_a_limits.png', dpi=200)
 
-num_values_2 = int(np.sqrt(len(b)//4))
+num_values_b = int(np.sqrt(len(b)//4))
 # Data in the form (x, i+1, j+1)
 # x = 0, 1 correspond to R_a, r_a
 # x = 2, 3 correspond to theta_a_min and theta_a_max
-#  Second index changes r_a, third index changes R_a
-b = np.reshape(b, [4, num_values_2, num_values_2])
+#  Second index changes R_a, third index changes r_a
+b = np.reshape(b, [num_values_b, num_values_b, 4]).T
 
 # Plot R_a against theta_a (min, max) for "fixed" r_a
 fig1, ax1 = plt.subplots()
-r_a_index = 99
+r_a_index = int(num_values_b*0.9)
 ax1.set_xlabel(r'$R_\alpha$')
 ax1.set_ylabel(r'$\theta_\alpha$')
-ax1.scatter(b[0, r_a_index, :], b[2, r_a_index, :], label=r'$\theta_{\alpha, min}$', color='tab:blue', linewidth=1, marker='.')
-ax1.scatter(b[0, r_a_index, :], b[3, r_a_index, :], label=r'$\theta_{\alpha, max}$', color='tab:red', linewidth=1, marker='.')
+ax1.scatter(b[0, :, r_a_index], b[2, :, r_a_index], label=r'$\theta_{\alpha, min}$', color='tab:blue', linewidth=1, marker='.')
+ax1.scatter(b[0, :, r_a_index], b[3, :, r_a_index], label=r'$\theta_{\alpha, max}$', color='tab:red', linewidth=1, marker='.')
 ax1.legend()
-ax1.set_ylim([-0.2, 3.5])
+# ax1.set_ylim([-0.2, 3.5])
 fig1.savefig('figures/R_a_theta_a_limits.png', dpi=200)
 
 # Plor r_a against theta_a (min, max) for fixed R_a
 fig2, ax2 = plt.subplots()
-R_a_index = 100
-ax2.scatter(b[1, :, R_a_index], b[2, :, R_a_index], label=r'$\theta_{\alpha, min}$', color='tab:blue', linewidth=1, marker='.')
-ax2.scatter(b[1, :, R_a_index], b[3, :, R_a_index], label=r'$\theta_{\alpha, max}$', color='tab:red', linewidth=1, marker='.')
+R_a_index = int(num_values_b*0.9)
+ax2.scatter(b[1, R_a_index, :], b[2, R_a_index, :,], label=r'$\theta_{\alpha, min}$', color='tab:blue', linewidth=1, marker='.')
+ax2.scatter(b[1, R_a_index, :], b[3, R_a_index, :], label=r'$\theta_{\alpha, max}$', color='tab:red', linewidth=1, marker='.')
 ax2.set_xlabel(r'$r_\alpha$')
 ax2.set_ylabel(r'$\theta_\alpha$')
-ax2.set_ylim([-0.2, 3.5])
+# ax2.set_ylim([-0.2, 3.5])
 ax2.legend()
 fig2.savefig('figures/small_r_a_theta_a_limits.png', dpi=200)
 
-b = np.reshape(b, [4, num_values_2**2])
+b = np.reshape(b, [4, num_values_b**2])
 
 # Plot R_a against r_a and theta_a
 fig3 = plt.figure()
 ax3 = plt.axes(projection ='3d')
-# ::2 halves points to make plot less dense
-y = b[0, ::2]
-x = b[1, ::2]
-z1 = b[2, ::2]
-z2 = b[3, ::2]
+# ::n reduce points to make plot less dense
+y = b[0, ::10]
+x = b[1, ::10]
+z1 = b[2, ::10]
+z2 = b[3, ::10]
 c1 = x + y
 c2 = c1
 
@@ -77,7 +78,7 @@ ax3.view_init(15, -115)
 ax3.set_xlabel(r'$r_\alpha$')
 ax3.set_ylabel(r'$R_\alpha$')
 ax3.set_zlabel(r'$\theta_\alpha$')
-ax3.set_zlim([0, 3.5])
+# ax3.set_zlim([0, 3.5])
 ax3.legend()
 fig3.savefig('figures/3d_limits.png', dpi=200)
 
