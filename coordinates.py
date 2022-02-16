@@ -200,18 +200,19 @@ def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, 
     intersect = calc_intersect(R_a, R_b)
     draw_angle(ax, gamma_ab, intersect, y_max - y_min, x_max - x_min, 0.1, angle=-gamma_ab, label=r'$\gamma_{\alpha\beta}$', label_offset=[0.1, -0.5])
 
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
+    # ax.set_xlim(x_min, x_max)
+    # ax.set_ylim(y_min, y_max)
 
-    # ax.set_xlim(-7, 1)
-    # ax.set_ylim(-4, 3)
+    ax.set_xlim(-7, 1)
+    ax.set_ylim(-4, 3)
 
     # ax.get_xaxis().set_visible(False)
     # ax.get_yaxis().set_visible(False)
     ax.axis('off')
 
-    text_1 = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' \
-        + r'$\gamma_\alpha$' + f' = {gamma_a:.2f}, ' + r'$R_\beta$' + f' = {R_b_mag:.2f}'
+    text_1 = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' + \
+        r'$\gamma_\alpha$' + f' = {gamma_a:.2f}, ' + r'$R_\beta$' + f' = {R_b_mag:.2f}, ' + \
+        r'$\gamma_{\alpha\beta}$' + f' = {gamma_ab:.2f}'
 
     text_2 = r'$M_\alpha$' + f'={consts[0]:.0f}, ' + \
             r'$M_\beta$' + f'={consts[1]:.0f}, ' + \
@@ -227,7 +228,7 @@ def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, 
     plt.draw()
     plt.show()
 
-    fig.savefig(f'figures/coords_R_a-{R_a_mag}_r_a-{r_a_mag}_gamma_a-{gamma_a}.pdf', dpi=400)
+    fig.savefig(f'figures/coords_R_a-{R_a_mag:.2f}_r_a-{r_a_mag:.2f}_gamma_a-{gamma_a:.2f}.pdf', dpi=400, bbox_inches = "tight")
 
     return
 
@@ -242,9 +243,9 @@ def main():
     mass_b = 3
     mass_c = 4
 
-    R_a_mag = 3 # Used 2.97 as example for theta_min > 0
-    r_a_mag = 6.965 # Used 5.66 as example for theta_min > 0
-    gamma_a = np.pi / 2
+    R_a_mag = 2.97
+    r_a_mag = 5.66
+    gamma_a = np.pi / 1.1
 
     verbose=True
 
