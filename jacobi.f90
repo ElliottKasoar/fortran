@@ -8,7 +8,7 @@ program jacobi
         real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, &
                 mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
                 single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
-                test_Simpson_integral, test_coord_lims(6)
+                test_Simpson_integral, test_coord_lims(6), values(9)
 
         ! MPI variables
         integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
@@ -74,6 +74,15 @@ program jacobi
 
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
+
+        if (rank==0) then
+                values = (/ mass_a, mass_b, mass_c, mixed_jacobi_lims(1), mixed_jacobi_lims(2), &
+                        mixed_jacobi_lims(3), mixed_jacobi_lims(4), mixed_jacobi_lims(5), &
+                        mixed_jacobi_lims(6) /)
+                open (unit=42, file='outputs/values', form='unformatted')
+                write(42) values
+                close (unit=42)
+        end if
 
         call MPI_Barrier(comm, ierr)
 

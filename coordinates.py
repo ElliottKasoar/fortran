@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 from matplotlib.patches import Arc
+from scipy.io import FortranFile
 
 def draw_line(ax, x_1, x_2, y_1, y_2, label, linewidth=0.5, linestyle='-', color='black', offset=[0, 0]):
 
@@ -163,7 +164,7 @@ def calc_intersect(x, y):
     return intersect
 
 
-def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag):
+def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag, consts):
 
     # Calulate min and max values for x and y to auto-scale
     x_coords = np.array([R_a[:2], r_a[:2], r_b[:2], r_c[:2], R_b[:2]])
@@ -209,9 +210,19 @@ def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, 
     # ax.get_yaxis().set_visible(False)
     ax.axis('off')
 
-    title = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' \
+    text_1 = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' \
         + r'$\gamma_\alpha$' + f' = {gamma_a:.2f}, ' + r'$R_\beta$' + f' = {R_b_mag:.2f}'
-    ax.set_title(title)
+
+    text_2 = r'$M_\alpha$' + f'={consts[0]:.0f}, ' + \
+            r'$M_\beta$' + f'={consts[1]:.0f}, ' + \
+            r'$M_\gamma$' + f'={consts[2]:.0f}, ' + \
+            r'$R_\alpha$' + f'={consts[3]:.0f} - {consts[4]:.0f}, ' + \
+            r'$R_\beta$' + f'={consts[5]:.0f} - {consts[6]:.0f}, ' + \
+            r'$\gamma_{\alpha\beta}$' + f'={consts[7]:.0f} - ' + r'$\pi$'
+
+    ax.text(-2, 3, text_1)
+    ax.text(-2, 4, text_2)
+    # ax.set_title(title)
 
     plt.draw()
     plt.show()
@@ -223,23 +234,25 @@ def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, 
 
 def main():
 
+    f = FortranFile('outputs/values', 'r')
+    consts = f.read_reals(dtype='float32')
+    f.close()
+
     mass_a = 2
     mass_b = 3
     mass_c = 4
 
-    R_a_mag = 2.97
-    r_a_mag = 5.66
+    R_a_mag = 3 # Used 2.97 as example for theta_min > 0
+    r_a_mag = 6.965 # Used 5.66 as example for theta_min > 0
     gamma_a = np.pi / 2
 
-    verbose=False
+    verbose=True
 
     R_a, r_a, r_b, r_c, R_b, R_c = calc_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a)
 
     R_b_mag = calc_mag(R_b)
     if verbose:
         print(f'R_b = {R_b_mag}')
-
-    print(f'R_b = {R_b_mag}')
 
     # Calculate gamma_a = r_a . R_a / r_a R_a
     calc_gamma_a = calc_angle(r_a, R_a)
@@ -255,7 +268,7 @@ def main():
     if verbose:
         print(f'Output gamma_ab = {gamma_ab} (~pi/{frac_gamma_ab:.1f}) rad')
 
-    plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag)
+    plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag, consts)
 
     return
 
