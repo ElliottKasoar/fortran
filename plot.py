@@ -28,7 +28,7 @@ ax0.legend()
 # ax0.set_ylim([-0.5, 10.5])
 ax0.xaxis.get_ticklocs(minor=True)
 ax0.minorticks_on()
-fig0.savefig('figures/R_a_r_a_limits.png', dpi=200)
+fig0.savefig('figures/R_a_r_a_limits.pdf', dpi=400)
 
 num_values_b = int(np.sqrt(len(b)//4))
 # Data in the form (x, i+1, j+1)
@@ -46,7 +46,7 @@ ax1.scatter(b[0, :, r_a_index], b[2, :, r_a_index], label=r'$\theta_{\alpha, min
 ax1.scatter(b[0, :, r_a_index], b[3, :, r_a_index], label=r'$\theta_{\alpha, max}$', color='tab:red', linewidth=1, marker='.')
 ax1.legend()
 # ax1.set_ylim([-0.2, 3.5])
-fig1.savefig('figures/R_a_theta_a_limits.png', dpi=200)
+fig1.savefig('figures/R_a_theta_a_limits.pdf', dpi=400)
 
 # Plor r_a against theta_a (min, max) for fixed R_a
 fig2, ax2 = plt.subplots()
@@ -57,7 +57,7 @@ ax2.set_xlabel(r'$r_\alpha$')
 ax2.set_ylabel(r'$\theta_\alpha$')
 # ax2.set_ylim([-0.2, 3.5])
 ax2.legend()
-fig2.savefig('figures/small_r_a_theta_a_limits.png', dpi=200)
+fig2.savefig('figures/small_r_a_theta_a_limits.pdf', dpi=400)
 
 b = np.reshape(b, [4, num_values_b**2])
 
@@ -80,7 +80,7 @@ ax3.set_ylabel(r'$R_\alpha$')
 ax3.set_zlabel(r'$\theta_\alpha$')
 # ax3.set_zlim([0, 3.5])
 ax3.legend()
-fig3.savefig('figures/3d_limits.png', dpi=200)
+fig3.savefig('figures/3d_limits.pdf', dpi=400)
 
 f1.close()
 f2.close()
