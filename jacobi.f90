@@ -302,7 +302,7 @@ contains
 
                 ! coord = theta_a
                 real :: cos_numerator, cos_denominator, cos_coord, coord, temp_R_b_1, temp_R_b_2, &
-                        R_b_over_m_b, rand_num
+                        R_b_over_m_b, rand_num, round_error
 
                 logical :: positive_root
 
@@ -348,8 +348,17 @@ contains
                         end if
 
                         if ( (R_b_over_m_b < lims(3) / m_b) .or. (R_b_over_m_b > lims(4) / m_b) ) then
-                                coord = -100.
-                                return
+                                round_error = 0.000001
+                                if (R_b_over_m_b > lims(4) / m_b .and. &
+                                        R_b_over_m_b < round_error + lims(4) / m_b) then
+                                        R_b_over_m_b = lims(4) / m_b
+                                else if (R_b_over_m_b < lims(3) / m_b .and. &
+                                        R_b_over_m_b > - round_error + lims(3) / m_b) then
+                                        R_b_over_m_b = lims(3) / m_b
+                                else
+                                        coord = -100.
+                                        return
+                                end if
                         end if
                 end if
 
@@ -778,7 +787,7 @@ contains
                 count = 0
 
                 if (random_range) then
-                        do i = 1, n
+                        do i = 1, n - 4
 
                                 ! Generate random R_b and gamma_ab that change each iteration
                                 call random_number(mixed_coords(2:3))
@@ -802,23 +811,38 @@ contains
                                                 count = count + 1
                                                 test_coord(count) = temp_theta
                                         end if
+                                end if
+                        end do
 
-                                        ! Alternative: Use generated R_b and theta_ab, with R_a to
-                                        ! generate a sample r_a. If this is close to the desired
-                                        ! r_a, work out the corresponding theta_a
-
-                                        ! test_r_a = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
-                                        !         mixed_coords(2), m_b, mixed_coords(3))
-
-                                        ! if (test_r_a < small_r_a + 0.05 .and. &
-                                        !         test_r_a > small_r_a - 0.05) then
-                                        !         count = count + 1
-                                        !         test_coord(count) = calculate_theta_a(test_r_a, &
-                                        !                 mu_a, mixed_coords(1), mass_c, &
-                                        !                 mixed_coords(2), m_b, mixed_coords(3))
-                                        ! end if
+                        do i = n - 3, n
+                                if (i == (n-3) .or. i == (n-2)) then
+                                        mixed_coords(2) = mixed_lims(3)
+                                else
+                                        mixed_coords(2) = mixed_lims(3) + width(2)
+                                end if
+                                if (i == (n-3) .or. i == (n-1)) then
+                                        mixed_coords(3) = mixed_lims(5)
+                                else
+                                        mixed_coords(3) = mixed_lims(5) + width(3)
                                 end if
 
+                                if (estimating_r_a) then
+                                        test_coord(i) = calculate_r_a(mu_a, mixed_coords(1), &
+                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
+                                        count = count + 1
+                                else if (estimating_theta_a) then
+
+                                        ! Attempt to calculate theta from R_a, r_a and theta_ab
+                                        temp_theta = calculate_theta_a_alt(small_r_a, mu_a, &
+                                                mixed_coords(1), mass_c, mixed_coords(3), m_b, &
+                                                mixed_lims)
+
+                                        ! If R_b is invalid, ignore theta calculated
+                                        if (temp_theta /= -100.) then
+                                                count = count + 1
+                                                test_coord(count) = temp_theta
+                                        end if
+                                end if
                         end do
                 else
                         do i = 1, n
