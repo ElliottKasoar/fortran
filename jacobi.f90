@@ -9,6 +9,7 @@ program jacobi
                 mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
                 single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
                 test_Simpson_integral, test_coord_lims(6), values(9)
+        logical :: save_inputs
 
         ! MPI variables
         integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
@@ -32,6 +33,8 @@ program jacobi
         call MPI_Comm_group(comm, group, ierr);
         call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
         call MPI_Comm_create(MPI_COMM_WORLD, sub_group, sub_comm, ierr)
+
+        save_inputs = .true.
 
         ! Number of points to generate for MC integration
         mc_n = 10000
@@ -75,13 +78,13 @@ program jacobi
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
-        if (rank==0) then
+        if (rank == 0 .and. save_inputs) then
                 values = (/ mass_a, mass_b, mass_c, mixed_jacobi_lims(1), mixed_jacobi_lims(2), &
                         mixed_jacobi_lims(3), mixed_jacobi_lims(4), mixed_jacobi_lims(5), &
                         mixed_jacobi_lims(6) /)
-                open (unit=42, file='outputs/values', form='unformatted')
-                write(42) values
-                close (unit=42)
+                open (unit=41, file='outputs/values', form='unformatted')
+                write(41) values
+                close (unit=41)
         end if
 
         call MPI_Barrier(comm, ierr)
@@ -234,8 +237,8 @@ contains
                 if (integrand_R_a <= 0. .or. integrand_R_b <= 0.) then
                         integrand_gamma_ab = 0.
                 else
-                        integrand_gamma_ab = (m_b / sqrt(integrand_R_b)) * - &
-                                ( (y * cos(z) / mu_a) + x / M_c )
+                        integrand_gamma_ab = (m_b / sqrt(integrand_R_b)) * &
+                        (-((y * cos(z) / mu_a) + x / M_c ))
 
                         integrand_gamma_ab = integrand_gamma_ab**2.
                 end if
@@ -281,7 +284,6 @@ contains
                 cos_numerator = - mu_a * ( (R_a / M_c) + (R_b / m_b) * cos(gamma_ab) )
 
                 cos_coord = cos_numerator / cos_denominator
-                ! print *, "cos_theta = ", cos_coord
 
                 ! Temporary to prevent NaN when taking acos - there is probably a better solution!
                 if (cos_coord > 1.) then
@@ -292,10 +294,6 @@ contains
                 end if
 
                 coord = acos(cos_coord)
-                !coord = cos_coord
-
-                ! print *, "r_a, numerator = ", cos_denominator, cos_denominator
-                ! print *, "theta = ", coord
 
         end function calculate_theta_a
 
@@ -384,10 +382,6 @@ contains
                 end if
 
                 coord = acos(cos_coord)
-                !coord = cos_coord
-                ! print *, "r_a, numerator = ", cos_denominator, cos_numerator
-                ! print *, "cos(theta_a) = ", cos_coord
-                ! print *, "theta_a = ", coord
 
         end function calculate_theta_a_alt
 
@@ -413,13 +407,14 @@ contains
                         theta_lims(4, n(1)+1, n(2)+1)
                 integer :: i, j, k, partial_count, count, imin, imax, progress, num_r_values, &
                         num_theta_values
-                logical :: save_lims
+                logical :: verbose, save_lims
 
                 ! MPI variables
                 integer :: sub_comm_size, ierr, request_1, request_2, r_tag, theta_tag, &
                         recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
 
                 save_lims = .true.
+                verbose = .true.
 
                 call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
 
@@ -456,16 +451,17 @@ contains
                 else
                         imax = -1 + (rank + 1) * n(1) / sub_comm_size
                 end if
-                ! print *, "Comm size", sub_comm_size
+
                 ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
                 ! Integrate each variable in turn, covering full limits
                 ! Variables labelled x, y and z for simplicity
                 do i = imin, imax
 
-                        progress = 100 * (i - imin) / (imax - imin)
-                        ! if (mod((imax-imin), 5) == 0) then
-                        if (mod((i - imin), (imax - imin + 1) / 5) == 0 .or. i == imax) then
-                                print *, "On rank", rank, "...Progress... ", progress, "%"
+                        if ((imax - imin >= 4) .and. verbose) then
+                                progress = 100 * (i - imin) / (imax - imin)
+                                if (mod((i - imin), (imax - imin + 1) / 5) == 0 .or. i == imax) then
+                                        print *, "On rank", rank, "...Progress... ", progress, "%"
+                                end if
                         end if
 
                         ! Set value for R_a (mixed and single) or x (test)
@@ -658,7 +654,9 @@ contains
                                         total_integral
                         end if
 
-                        print *, "Number of limits not found: ", count
+                        if (verbose) then
+                                print *, "Number of limits not found: ", count
+                        end if
 
                         if (single_jacobi .and. save_lims) then
                                 open (unit=42, file='outputs/r_lims', form='unformatted')
@@ -703,27 +701,29 @@ contains
 
                         ! Generate random points in range 0 to 1
                         call random_number(coords)
-                        ! print *, i, ". Random numbers: ", coords(1), coords(2), coords(3)
 
                         ! Random R_a
                         coords(1) = single_lims(1) + coords(1) * width(1)
 
+                        ! r_a limits from current R_a
                         single_lims(3:4) = get_limits(.true., .false., .false., &
                                 coords(1), 0., mixed_lims, mu_a, m_b, mass_c)
 
                         width(2) = abs(single_lims(4) - single_lims(3))
 
-                        ! Random r_a
+                        ! Random r_a in calculated range
                         coords(2) = single_lims(3) + coords(2) * width(2)
 
+                        ! theta_a limits from current R_a and r_a
                         single_lims(5:6) = get_limits(.false., .true., .true., &
                                 coords(1), coords(2), mixed_lims, mu_a, m_b, mass_c)
 
                         width(3) = abs(single_lims(6) - single_lims(5))
 
-                        ! Random theta_a
+                        ! Random theta_a in calculated range
                         coords(3) = single_lims(5) + coords(3) * width(3)
 
+                        ! Evaluate integral element
                         temp_integral = evaluate_function(coords(1), coords(2), coords(3))
                         temp_integral = width(1) * width(2) * width(3) * temp_integral
                         total_integral = total_integral + temp_integral
@@ -752,10 +752,6 @@ contains
                 F = 1.
                 ! Multiply F by integration variables in integral
                 total_func = x**2. * y**2. * sin(z) * F
-                ! total_func = sqrt(x+y+z)
-
-                ! print *, "R_a, r_a, gamma_a: ", x, y, z
-                ! print *, "Total func: ", total_func
 
         end function evaluate_function
 
@@ -882,8 +878,6 @@ contains
                         single_lims(1) = 0.
                         single_lims(2) = 0.
                 end if
-                ! print *, "coords :", test_coord(1:count)
-                ! print *, "count, limits :", count, single_lims
 
         end function estimate_jacobi_lims
 
