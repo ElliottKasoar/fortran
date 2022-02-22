@@ -63,7 +63,7 @@ fig1.savefig('figures/R_a_theta_a_limits.pdf', dpi=400)
 # Plor r_a against theta_a (min, max) for fixed R_a
 fig2, ax2 = plt.subplots()
 R_a_index = int(num_values_b*0.9)
-ax2.scatter(b[1, R_a_index, :], b[2, R_a_index, :,], label=r'$\theta_{\alpha, min}$', color='tab:blue', linewidth=1, marker='.')
+ax2.scatter(b[1, R_a_index, :], b[2, R_a_index, :], label=r'$\theta_{\alpha, min}$', color='tab:blue', linewidth=1, marker='.')
 ax2.scatter(b[1, R_a_index, :], b[3, R_a_index, :], label=r'$\theta_{\alpha, max}$', color='tab:red', linewidth=1, marker='.')
 ax2.set_xlabel(r'$r_\alpha$')
 ax2.set_ylabel(r'$\theta_\alpha$')
