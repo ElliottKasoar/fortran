@@ -124,11 +124,11 @@ program jacobi
         end if
 
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
-        single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, &
-                mass_c, comm)
-        if (rank == 0) then
-                print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
-        end if
+        ! single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, &
+        !         mass_c, comm)
+        ! if (rank == 0) then
+        !         print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
+        ! end if
 
         ! Check the timer after single MC integration, before test integration
         call MPI_Barrier(comm, ierr)
@@ -457,8 +457,8 @@ contains
                 integer :: sub_comm_size, ierr, request_1, request_2, r_tag, theta_tag, &
                         recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
 
-                save_lims = .true.
                 verbose = .true.
+                save_lims = .true.
 
                 call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
 
@@ -938,9 +938,9 @@ contains
                                 mixed_coords(3) = mixed_lims(5) + mixed_coords(3) * width(3)
 
                                 if (estimating_r_a) then
-                                        test_coord(i) = calculate_r_a(mu_a, mixed_coords(1), &
-                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
                                         count = count + 1
+                                        test_coord(count) = calculate_r_a(mu_a, mixed_coords(1), &
+                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
                                 else if (estimating_theta_a) then
 
                                         ! Attempt to calculate theta from R_a, r_a and theta_ab
@@ -969,9 +969,9 @@ contains
                                 end if
 
                                 if (estimating_r_a) then
-                                        test_coord(i) = calculate_r_a(mu_a, mixed_coords(1), &
-                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
                                         count = count + 1
+                                        test_coord(count) = calculate_r_a(mu_a, mixed_coords(1), &
+                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
                                 else if (estimating_theta_a) then
 
                                         ! Attempt to calculate theta from R_a, r_a and theta_ab
@@ -998,15 +998,24 @@ contains
                                                 width(3) / real(n))
 
                                         if (estimating_r_a) then
-                                                test_coord(j + (i-1) * (n-1)) = calculate_r_a(&
-                                                        mu_a, mixed_coords(1), mass_c, &
-                                                        mixed_coords(2), m_b, mixed_coords(3))
+                                                test_coord(count) = calculate_r_a(mu_a, &
+                                                        mixed_coords(1), mass_c, mixed_coords(2), &
+                                                        m_b, mixed_coords(3))
+                                                count = count + 1
                                         else if (estimating_theta_a) then
-                                                test_coord(j + (i-1) * (n-1)) = calculate_theta_a(&
-                                                        small_r_a, mu_a, mixed_coords(1), mass_c, &
-                                                        mixed_coords(2), m_b, mixed_coords(3))
-                                        end if
+                                                ! Attempt to calculate theta from
+                                                ! R_a, r_a and theta_ab
+                                                temp_theta = calculate_theta_a_alt(small_r_a, &
+                                                        mu_a, mixed_coords(1), mass_c, &
+                                                        mixed_coords(3), m_b, mixed_lims)
 
+                                                ! If R_b is invalid, ignore theta calculated
+                                                if (temp_theta /= -100.) then
+                                                        count = count + 1
+                                                        test_coord(count) = temp_theta
+                                                end if
+
+                                        end if
                                 end do
                         end do
                 end if
