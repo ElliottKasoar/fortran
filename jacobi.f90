@@ -41,7 +41,7 @@ program jacobi
         mixed_jacobi_n = (/ 200, 200, 200 /)
 
         ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, theta_a_n)
-        single_jacobi_n = (/ 200, 200, 200 /)
+        single_jacobi_n = (/ 500, 500, 500 /)
 
         ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
         test_coord_n = (/ 1000, 1000, 1000 /)
@@ -544,11 +544,11 @@ contains
                                 ! For single Jacobi, calculate theta_a limits from R_a and r_a
                                 if (single_jacobi) then
                                         prev_lims = lims(5:6)
-                                        lims(5:6) = get_limits(.false., .true., .true., &
-                                                x, y, mixed_lims, mu_a, m_b, mass_c)
-                                        ! print *, "theta_a min, max estimates: ", lims(5:6)
-                                        ! lims(5:6) = get_limits(.false., .true., .false., &
+                                        ! lims(5:6) = get_limits(.false., .true., .true., &
                                         !         x, y, mixed_lims, mu_a, m_b, mass_c)
+                                        ! print *, "theta_a min, max estimates: ", lims(5:6)
+                                        lims(5:6) = get_limits(.false., .true., .false., &
+                                                x, y, mixed_lims, mu_a, m_b, mass_c)
                                         ! print *, "theta_a min, max analytical: ", lims(5:6)
 
                                         ! If unable to find limits, estimate as previous?
@@ -1039,12 +1039,14 @@ contains
                 real, intent(in) :: R_a, small_r_a, mixed_lims(6), mu_a, m_b, mass_c
                 logical, intent(in) :: get_r_lims, get_theta_lims, estimate_lims
 
-                real :: lims(2)
+                real :: lims(2), round_error
 
                 if (get_r_lims .and. get_theta_lims) then
                         print *, "Only one coordinate flag should be set to true"
                         stop
                 end if
+
+                round_error = 0.000001
 
                 if (get_r_lims) then
                         if (estimate_lims) then
@@ -1068,14 +1070,37 @@ contains
                                 lims(1:2) = estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, &
                                         mass_c, .false., .true., small_r_a)
                         else
-                                ! theta_a_min depends on current R_a (and r_a)
-                                ! but uses full R_b_max and theta_ab_min
-                                lims(1) = calculate_theta_a(small_r_a, mu_a, R_a, mass_c, &
-                                        mixed_lims(4), m_b, mixed_lims(6))
 
-                                ! For R_b = 0, theta_a_max = pi
-                                lims(2) = calculate_theta_a(small_r_a, mu_a, R_a, mass_c, &
-                                        mixed_lims(3), m_b, mixed_lims(5))
+                                ! theta_a is undefined for R_a = 0 or r_a = 0
+                                if (R_a == 0. .or. small_r_a == 0.) then
+                                        lims(1) = 0.
+                                        lims(2) = 0.
+                                else
+                                        ! Calculate cos(theta_a) when R_b is maximum
+                                        lims(1) = mass_c * mu_a * ((mixed_lims(4) / m_b )**2. &
+                                                - (R_a / mass_c)**2. - (small_r_a / mu_a)**2.) &
+                                                / (2. * R_a * small_r_a)
+
+                                        ! There may be no valid cos(theta_a) for maximum R_b
+                                        ! In this case, theta_a spans full range
+                                        if (lims(1) > 1.) then
+                                                lims(1) = 0.
+                                        else if (lims(1) < -1.) then
+                                                ! Allow for rounding errors
+                                                if (lims(1) > -1. - round_error) then
+                                                        lims(1) = -1.
+                                                        lims(1) = acos(lims(1))
+                                                else
+                                                        lims(1) = 0.
+                                                end if
+                                        else
+                                                lims(1) = acos(lims(1))
+                                        end if
+
+                                        ! theta_a_max = pi
+                                        lims(2) = calculate_theta_a(small_r_a, mu_a, R_a, mass_c, &
+                                                mixed_lims(4), m_b, mixed_lims(5))
+                                end if
                         end if
                 end if
 
