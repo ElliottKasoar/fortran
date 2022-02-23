@@ -13,22 +13,20 @@ program jacobi
 
         ! MPI variables
         integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
-        double precision :: tstart, tstop, tdiff
+        double precision :: time(7), t_diff
 
         ! Initialise MPI
         comm = MPI_COMM_WORLD
         call MPI_Init(ierr)
 
-        ! Line up at the start line
+        ! Start the timer
         call MPI_Barrier(comm, ierr)
-
-        ! Fire the gun and start the clock
-        tstart = MPI_Wtime()
+        time(1) = MPI_Wtime()
 
         call MPI_Comm_rank(comm, rank, ierr)
         call MPI_Comm_size(comm, comm_size, ierr)
 
-        ! Keep only process 0 in the new group and create new comm
+        ! Create new group with only process 0, and create corresponding new comm
         sub_ranks(1) = 0
         call MPI_Comm_group(comm, group, ierr);
         call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
@@ -55,26 +53,6 @@ program jacobi
         ! Limits of integration (x_min, x_max, y_min, y_max, z_min, z_max)
         test_coord_lims = (/ 0., 1., 0., 1., 0., 1. /)
 
-        ! Calculate separable integrals for R_a, R_b and theta_ab using Simpson's rule
-        if (rank == 0) then
-                R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
-                        mixed_jacobi_lims(2), .true.)
-                R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
-                        mixed_jacobi_lims(4), .true.)
-                theta_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
-                        mixed_jacobi_lims(5), mixed_jacobi_lims(6), .false.)
-
-                ! Integrals are separable so multiply for total integral
-                mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
-                print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
-
-                ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
-                mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, &
-                mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false., sub_comm)
-                print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
-                        mixed_Simpson_integral
-        end if
-
         ! Calculate mass relations (three masses defined within)
         call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
@@ -87,7 +65,48 @@ program jacobi
                 close (unit=41)
         end if
 
+        ! Check the timer before separated mixed integration
         call MPI_Barrier(comm, ierr)
+        time(2) = MPI_Wtime()
+
+        ! Calculate separable integrals for R_a, R_b and theta_ab using Simpson's rule
+        if (rank == 0) then
+                R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
+                        mixed_jacobi_lims(2), .true.)
+                R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
+                        mixed_jacobi_lims(4), .true.)
+                theta_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
+                        mixed_jacobi_lims(5), mixed_jacobi_lims(6), .false.)
+
+                ! Integrals are separable so multiply for total integral
+                mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
+                print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
+        end if
+
+        ! Check the timer after separated mixed integration, before unseparated mixed integration
+        call MPI_Barrier(comm, ierr)
+        time(3) = MPI_Wtime()
+        if (rank == 0) then
+                t_diff = time(3) - time(2)
+                print *, "Integration time: ", t_diff
+        end if
+
+        if (rank == 0) then
+                ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
+                mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, &
+                mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false., &
+                        sub_comm)
+                print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
+                        mixed_Simpson_integral
+        end if
+
+        ! Check the timer after unseparated mixed integration, before single Simpson integration
+        call MPI_Barrier(comm, ierr)
+        time(4) = MPI_Wtime()
+        if (rank == 0) then
+                t_diff = time(4) - time(3)
+                print *, "Integration time: ", t_diff
+        end if
 
         ! Calculate integral for R_a, r_a and theta_a using Simpson's rule on each in turn
         single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
@@ -95,22 +114,46 @@ program jacobi
         if (rank == 0) then
                 print *, "Single Jacobi integral using Simpson's rule = ", single_Simpson_integral
         end if
+
+        ! Check the timer after single Simpson integration, before single MC integration
+        call MPI_Barrier(comm, ierr)
+        time(5) = MPI_Wtime()
+        if (rank == 0) then
+                t_diff = time(5) - time(4)
+                print *, "Integration time: ", t_diff
+        end if
+
         ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
-        ! single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c)
-        ! print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
+        single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, &
+                mass_c, comm)
+        if (rank == 0) then
+                print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
+        end if
+
+        ! Check the timer after single MC integration, before test integration
+        call MPI_Barrier(comm, ierr)
+        time(6) = MPI_Wtime()
+        if (rank == 0) then
+                t_diff = time(6) - time(5)
+                print *, "Integration time: ", t_diff
+        end if
 
         ! Calculate integral for x, y and z using Simpson's rule on each in turn
         ! test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
-        !         mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true., sub_comm)
-        ! print *, "Test integral using Simpson's rule = ", test_Simpson_integral
+        !         mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true., comm)
+        ! if (rank == 0) then
+        !         print *, "Test integral using Simpson's rule = ", test_Simpson_integral
+        ! end if
 
-        !  Stop the clock
-        tstop = MPI_Wtime()
-
-        ! Measure and print time
+        ! Check the timer after test integration, at end of program
+        call MPI_Barrier(comm, ierr)
+        time(7) = MPI_Wtime()
         if (rank == 0) then
-                tdiff = tstop - tstart
-                print *, "Integration time: ", tdiff
+                t_diff = time(7) - time(6)
+                print *, "Integration time: ", t_diff
+
+                t_diff = time(7) - time(1)
+                print *, "Program time: ", t_diff
         end if
 
         call MPI_Finalize(ierr)
@@ -124,9 +167,9 @@ contains
                 real, intent(inout) :: mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
 
                 ! Atom masses
-                mass_a = 2.
-                mass_b = 3.
-                mass_c = 4.
+                mass_a = 1.
+                mass_b = 1.
+                mass_c = 1.
 
                 ! Sum of masses
                 mass_total = 0.
@@ -354,13 +397,14 @@ contains
                                 R_b_over_m_b = temp_R_b_2 + sqrt(temp_R_b_1)
                         end if
 
-                        if ( (R_b_over_m_b < lims(3) / m_b) .or. (R_b_over_m_b > lims(4) / m_b) ) then
+                        if ( (R_b_over_m_b < lims(3) / m_b) &
+                        .or. (R_b_over_m_b > lims(4) / m_b) ) then
                                 round_error = 0.000001
-                                if (R_b_over_m_b > lims(4) / m_b .and. &
-                                        R_b_over_m_b < round_error + lims(4) / m_b) then
+                                if (R_b_over_m_b > lims(4) / m_b &
+                                .and. R_b_over_m_b < round_error + lims(4) / m_b) then
                                         R_b_over_m_b = lims(4) / m_b
-                                else if (R_b_over_m_b < lims(3) / m_b .and. &
-                                        R_b_over_m_b > - round_error + lims(3) / m_b) then
+                                else if (R_b_over_m_b < lims(3) / m_b &
+                                .and. R_b_over_m_b > - round_error + lims(3) / m_b) then
                                         R_b_over_m_b = lims(3) / m_b
                                 else
                                         coord = -100.
@@ -419,7 +463,7 @@ contains
                 call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
 
                 if ((mixed_jacobi .and. single_jacobi) .or. (mixed_jacobi .and. test_coords) &
-                        .or. (single_jacobi .and. test_coords)) then
+                .or. (single_jacobi .and. test_coords)) then
                         print *, "Only one coordinate flag should be set to true"
                         stop
                 end if
@@ -459,7 +503,8 @@ contains
 
                         if ((imax - imin >= 4) .and. verbose) then
                                 progress = 100 * (i - imin) / (imax - imin)
-                                if (mod((i - imin), (imax - imin + 1) / 5) == 0 .or. i == imax) then
+                                if (mod((i - imin), (imax - imin + 1) / 5) == 0 &
+                                .or. i == imax) then
                                         print *, "On rank", rank, "...Progress... ", progress, "%"
                                 end if
                         end if
@@ -672,18 +717,37 @@ contains
 
 
         ! Calculate integral with Monte Carlo
-        function integrate_MC(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c) result(total_integral)
+        function integrate_MC(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, sub_comm) &
+                result(total_integral)
 
                 implicit none
 
                 real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
                 integer, intent(in) :: n
 
-                real :: width(3), coords(3), single_lims(6), &
-                temp_integral, total_integral
-                integer :: i
+                ! MPI variables
+                integer, intent(in) :: sub_comm
 
+                real :: width(3), coords(3), single_lims(6), temp_integral, partial_integral, &
+                        total_integral, r_lims(3, n+1), theta_lims(4, n+1)
+                integer :: i, imin, imax, progress, partial_count, count, num_r_values, &
+                        num_theta_values
+                logical :: verbose, save_lims
+
+                ! MPI variables
+                integer :: sub_comm_size, ierr, request_1, request_2, r_tag, theta_tag, &
+                recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
+
+                verbose = .true.
+                save_lims = .false.
+
+                call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
+
+                partial_integral = 0.
                 total_integral = 0.
+
+                partial_count = 0
+                count = 0
 
                 width = (/ 0., 0., 0. /)
                 coords = (/ 0., 0., 0. /)
@@ -695,7 +759,22 @@ contains
 
                 width(1) = abs(single_lims(2) - single_lims(1))
 
-                do i = 0, n
+                imin = rank * n / sub_comm_size
+                if (rank == sub_comm_size - 1) then
+                        imax = n
+                else
+                        imax = -1 + (rank + 1) * n / sub_comm_size
+                end if
+
+                ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
+                do i = imin, imax
+
+                        if ((imax - imin >= 4) .and. verbose) then
+                                progress = 100 * (i - imin) / (imax - imin)
+                                if (mod((i - imin), (imax - imin + 1) / 5) == 0 .or. i == imax) then
+                                        print *, "On rank", rank, "...Progress... ", progress, "%"
+                                end if
+                        end if
 
                         temp_integral = 0.
 
@@ -709,6 +788,11 @@ contains
                         single_lims(3:4) = get_limits(.true., .false., .false., &
                                 coords(1), 0., mixed_lims, mu_a, m_b, mass_c)
 
+                        if (save_lims) then
+                                r_lims(1, i+1) = coords(1)
+                                r_lims(2:3, i+1) = single_lims(3:4)
+                        end if
+
                         width(2) = abs(single_lims(4) - single_lims(3))
 
                         ! Random r_a in calculated range
@@ -718,42 +802,94 @@ contains
                         single_lims(5:6) = get_limits(.false., .true., .true., &
                                 coords(1), coords(2), mixed_lims, mu_a, m_b, mass_c)
 
+                        if (save_lims) then
+                                theta_lims(1, i+1) = coords(1)
+                                theta_lims(2, i+1) = coords(2)
+                                theta_lims(3:4, i+1) = single_lims(5:6)
+                        end if
+
                         width(3) = abs(single_lims(6) - single_lims(5))
+
+                        ! If unable to find limits, estimate as previous?
+                        if (single_lims(5) == 0. .and. single_lims(6) == 0. .and. i > 0) then
+                                ! lims(5:6) = prev_lims
+                                partial_count = partial_count + 1
+                        end if
 
                         ! Random theta_a in calculated range
                         coords(3) = single_lims(5) + coords(3) * width(3)
 
                         ! Evaluate integral element
-                        temp_integral = evaluate_function(coords(1), coords(2), coords(3))
+                        temp_integral = single_jacobi_integrand_func(coords(1), coords(2), &
+                                coords(3), mu_a, mass_c, m_b)
                         temp_integral = width(1) * width(2) * width(3) * temp_integral
-                        total_integral = total_integral + temp_integral
+                        partial_integral = partial_integral + temp_integral
 
                 end do
 
-                total_integral = total_integral / real(n)
+                ! Sum integrals from all processes
+                call MPI_Reduce(partial_integral, total_integral, 1, MPI_REAL, MPI_SUM, 0, &
+                        sub_comm, ierr)
+                call MPI_Reduce(partial_count, count, 1, MPI_INT, MPI_SUM, 0, sub_comm, ierr)
 
-                total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
+                ! Send limits to rank 0 to save
+                r_tag = 0
+                theta_tag = 1
+                if (save_lims) then
+                        if (rank == 0) then
+                                ! Receive from all other ranks
+                                do i = 1, sub_comm_size - 1
+                                        imin = i * n / sub_comm_size
+                                        if (i == sub_comm_size - 1) then
+                                                imax = n
+                                        else
+                                                imax = -1 + (i + 1) * n / sub_comm_size
+                                        end if
+
+                                        num_r_values = (imax - imin + 1) * 3
+                                        call MPI_Recv(r_lims(:, imin+1:imax+1), num_r_values, &
+                                                MPI_REAL, i, r_tag, sub_comm, recv_status_1, ierr)
+
+                                        num_theta_values = (imax - imin + 1) * 4
+                                        call MPI_Recv(theta_lims(:, imin+1:imax+1), &
+                                                num_theta_values, MPI_REAL, i, theta_tag, &
+                                                sub_comm, recv_status_2, ierr)
+                                end do
+                        else
+                                ! All non-zero ranks send to rank 0
+                                num_r_values = (imax - imin + 1) * 3
+                                call MPI_Ssend(r_lims(:, imin+1:imax+1), num_r_values, MPI_REAL, &
+                                        0, r_tag, sub_comm, request_1, ierr)
+
+                                num_theta_values = (imax - imin + 1) * 4
+                                call MPI_Ssend(theta_lims(:, imin+1:imax+1), num_theta_values, &
+                                        MPI_REAL, 0, theta_tag, sub_comm, request_2, ierr)
+                        end if
+                end if
+
+                ! All sends/receives complete
+                call MPI_Barrier(sub_comm, ierr)
+
+                if (rank == 0) then
+
+                        total_integral = total_integral / real(n)
+                        total_integral = ( (mu_a * mu_b) / (m_a * m_b) )**(-3./2.) * total_integral
+
+                        if (verbose) then
+                                print *, "Number of limits not found: ", count
+                        end if
+
+                        if (save_lims) then
+                                open (unit=42, file='outputs/r_lims', form='unformatted')
+                                write(42) r_lims
+                                close (unit=42)
+                                open (unit=43, file='outputs/theta_lims', form='unformatted')
+                                write(43) theta_lims
+                                close (unit=43)
+                        end if
+                end if
 
         end function integrate_MC
-
-
-        ! Evaluates hardcoded function based on x, y and z
-        function evaluate_function(x, y, z) result(total_func)
-
-                implicit none
-
-                real, intent(in) :: x, y, z
-
-                real :: total_func, F
-
-                total_func = 0.
-
-                ! Function being integrated F(x, y, z)
-                F = 1.
-                ! Multiply F by integration variables in integral
-                total_func = x**2. * y**2. * sin(z) * F
-
-        end function evaluate_function
 
 
         ! Estimate the minimum and maximum values of r_a, based on known R_a
@@ -765,7 +901,8 @@ contains
                 real, intent(in) :: R_a, mixed_lims(6), mu_a, m_b, mass_c, small_r_a
                 logical, intent(in) :: estimating_r_a, estimating_theta_a
 
-                real :: test_coord(100000), mixed_coords(3), width(3), single_lims(2), test_r_a, temp_theta
+                real :: test_coord(100000), mixed_coords(3), width(3), single_lims(2), test_r_a, &
+                        temp_theta
                 integer :: i, j, n, count
                 logical :: random_range
 
@@ -857,14 +994,17 @@ contains
 
                                 do j = 1, n
                                         ! Evenly sample entire range of each coord
-                                        mixed_coords(3) = mixed_lims(5) + (real(j-1) * width(3) / real(n))
+                                        mixed_coords(3) = mixed_lims(5) + (real(j-1) * &
+                                                width(3) / real(n))
 
                                         if (estimating_r_a) then
-                                                test_coord(j + (i-1) * (n-1)) = calculate_r_a(mu_a, mixed_coords(1), mass_c, &
+                                                test_coord(j + (i-1) * (n-1)) = calculate_r_a(&
+                                                        mu_a, mixed_coords(1), mass_c, &
                                                         mixed_coords(2), m_b, mixed_coords(3))
                                         else if (estimating_theta_a) then
-                                                test_coord(j + (i-1) * (n-1)) = calculate_theta_a(small_r_a, mu_a, &
-                                                        mixed_coords(1), mass_c, mixed_coords(2), m_b, mixed_coords(3))
+                                                test_coord(j + (i-1) * (n-1)) = calculate_theta_a(&
+                                                        small_r_a, mu_a, mixed_coords(1), mass_c, &
+                                                        mixed_coords(2), m_b, mixed_coords(3))
                                         end if
 
                                 end do
@@ -974,7 +1114,7 @@ contains
                 if (denominator  < 0.00000001) then
                         denominator =  0.00000001
                 end if
-                integrand = 1 / denominator
+                integrand = 1. / denominator
 
         end function test_integrand_func
 
