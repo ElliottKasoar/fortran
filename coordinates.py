@@ -38,7 +38,7 @@ def draw_angle(ax, theta_2, origin=[0, 0], len_x_axis=1, len_y_axis=1, offset=1,
     return
 
 
-def calc_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a):
+def calc_single_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a):
     # R_a starts at the centre of mass of B and C (start of R_a) and ends at A (0, 0)
     R_a_x_1 = -R_a_mag
     R_a_x_2 = 0
@@ -115,6 +115,26 @@ def calc_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a):
     return coords
 
 
+def calc_mixed_coords(mass_a, mass_b, mass_c, R_a_mag, R_b_mag, gamma_ab):
+
+    M = mass_a + mass_b + mass_c
+    m_a = mass_b * mass_c / (mass_b + mass_c)
+    m_b = mass_a * mass_c / (mass_a + mass_c)
+    mu_a = mass_a * mass_b * mass_c / (m_a * M)
+
+    r_a_mag = (R_a_mag / mass_c)**2 + (R_b_mag/m_b)**2 + 2 * R_a_mag * R_b_mag * np.cos(gamma_ab) / (mass_c * m_b)
+    r_a_mag = np.sqrt(r_a_mag)
+    r_a_mag *= mu_a
+
+    gamma_a = (R_a_mag / mass_c) + R_b_mag * np.cos(gamma_ab) / m_b
+    gamma_a *= mu_a * np.sign(-gamma_ab) / r_a_mag
+    gamma_a = np.arccos(gamma_a)
+
+    coords = calc_single_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a)
+
+    return coords
+
+
 def calc_mag(x):
 
     x_length = x[1] - x[0]
@@ -164,7 +184,7 @@ def calc_intersect(x, y):
     return intersect
 
 
-def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag, consts):
+def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag, consts, single_jacobi=True, save_plots=False):
 
     # Calulate min and max values for x and y to auto-scale
     x_coords = np.array([R_a[:2], r_a[:2], r_b[:2], r_c[:2], R_b[:2]])
@@ -200,19 +220,19 @@ def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, 
     intersect = calc_intersect(R_a, R_b)
     draw_angle(ax, gamma_ab, intersect, y_max - y_min, x_max - x_min, 0.1, angle=-gamma_ab, label=r'$\gamma_{\alpha\beta}$', label_offset=[0.1, -0.5])
 
-    # ax.set_xlim(x_min, x_max)
-    # ax.set_ylim(y_min, y_max)
+    ax.set_xlim(-6.75, 1.25)
+    ax.set_ylim(-3.5, 4)
 
-    ax.set_xlim(-7, 1)
-    ax.set_ylim(-4, 3)
-
-    # ax.get_xaxis().set_visible(False)
-    # ax.get_yaxis().set_visible(False)
     ax.axis('off')
 
-    text_1 = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' + \
-        r'$\gamma_\alpha$' + f' = {gamma_a:.2f}, ' + r'$R_\beta$' + f' = {R_b_mag:.2f}, ' + \
-        r'$\gamma_{\alpha\beta}$' + f' = {gamma_ab:.2f}'
+    if single_jacobi:
+        text_1 = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' + \
+            r'$\gamma_\alpha$' + f' = {gamma_a:.2f}, ' + r'$R_\beta$' + f' = {R_b_mag:.2f}, ' + \
+            r'$\gamma_{\alpha\beta}$' + f' = {gamma_ab:.2f}'
+    else:
+        text_1 = r'$R_\alpha$' + f' = {R_a_mag:.2f}, ' + r'$R_\beta$' + f' = {R_b_mag:.2f}, ' + \
+            r'$\gamma_{\alpha\beta}$' + f' = {gamma_ab:.2f}, ' + r'$r_\alpha$' + f' = {r_a_mag:.2f}, ' + \
+            r'$\gamma_\alpha$' + f' = {gamma_a:.2f}'
 
     text_2 = r'$M_\alpha$' + f'={consts[0]:.0f}, ' + \
             r'$M_\beta$' + f'={consts[1]:.0f}, ' + \
@@ -221,15 +241,17 @@ def plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, 
             r'$R_\beta$' + f'={consts[5]:.0f} - {consts[6]:.0f}, ' + \
             r'$\gamma_{\alpha\beta}$' + f'={consts[7]:.0f} - ' + r'$\pi$'
 
-    ax.text(-2, 3, text_1)
-    ax.text(-2, 4, text_2)
-    # ax.set_title(title)
+    ax.text(-6, 4, text_1)
+    ax.text(-6, 5, text_2)
 
     plt.draw()
     plt.show()
 
-    fig.savefig(f'figures/coords_R_a-{R_a_mag:.2f}_r_a-{r_a_mag:.2f}_gamma_a-{gamma_a:.2f}.pdf', dpi=400, bbox_inches = "tight")
-
+    if save_plots:
+        if single_jacobi:
+            fig.savefig(f'figures/single/coords_R_a-{R_a_mag:.2f}_r_a-{r_a_mag:.2f}_gamma_a-{gamma_a:.2f}.pdf', dpi=400, bbox_inches = "tight")
+        else:
+            fig.savefig(f'figures/mixed/coords_R_a-{R_a_mag:.2f}_R_b-{R_b_mag:.2f}_gamma_ab-{gamma_ab:.2f}.pdf', dpi=400, bbox_inches = "tight")
     return
 
 
@@ -239,37 +261,69 @@ def main():
     consts = f.read_reals(dtype='float32')
     f.close()
 
-    mass_a = 2
-    mass_b = 3
-    mass_c = 4
+    mass_a = 1
+    mass_b = 1
+    mass_c = 1
 
+    # Used for single Jacobi
     R_a_mag = 2.97
     r_a_mag = 5.66
-    gamma_a = np.pi / 1.1
+    gamma_a = np.pi / 3
 
-    verbose=True
+    # Used for mixed Jacobi
+    R_a_mag = 2.97
+    R_b_mag = 4.5
+    gamma_ab = 2.7
 
-    R_a, r_a, r_b, r_c, R_b, R_c = calc_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a)
+    # Control flags
+    verbose = True
+    save_plots = True
+    single_jacobi = False
 
-    R_b_mag = calc_mag(R_b)
-    if verbose:
-        print(f'R_b = {R_b_mag}')
+    if single_jacobi:
+        R_a, r_a, r_b, r_c, R_b, R_c = calc_single_coords(mass_a, mass_b, mass_c, R_a_mag, r_a_mag, gamma_a)
+
+        R_b_mag = calc_mag(R_b)
+        if verbose:
+            print(f'R_b = {R_b_mag}')
+    else:
+        R_a, r_a, r_b, r_c, R_b, R_c = calc_mixed_coords(mass_a, mass_b, mass_c, R_a_mag, R_b_mag, gamma_ab)
+
+        r_a_mag = calc_mag(r_a)
+        if verbose:
+            print(f'r_a = {r_a_mag}')
 
     # Calculate gamma_a = r_a . R_a / r_a R_a
     calc_gamma_a = calc_angle(r_a, R_a)
-    frac_gamma_a = np.pi / gamma_a
-    frac_calc_gamma_a = np.pi / calc_gamma_a
-    if verbose:
-        print(f'Input gamma_a = {gamma_a} (~pi/{frac_gamma_a:.1f}) rad')
-        print(f'Output gamma_a = {calc_gamma_a} (~pi/{frac_calc_gamma_a:.1f}) rad')
 
     # Calculate gamma_ab = R_b . R_a / R_a R_b
-    gamma_ab = calc_angle(R_b, R_a)
-    frac_gamma_ab = np.pi / gamma_ab
-    if verbose:
-        print(f'Output gamma_ab = {gamma_ab} (~pi/{frac_gamma_ab:.1f}) rad')
+    calc_gamma_ab = calc_angle(R_b, R_a)
 
-    plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag, consts)
+    if single_jacobi:
+        gamma_ab = calc_gamma_ab
+    else:
+        gamma_a = calc_gamma_a
+
+    if verbose:
+
+        # Input gamma_a or gamma_ab as fraction of pi
+        frac_gamma_a = np.pi / gamma_a
+        frac_gamma_ab = np.pi / gamma_ab
+
+        frac_calc_gamma_a = np.pi / calc_gamma_a
+        frac_calc_gamma_ab = np.pi / gamma_ab
+
+        if single_jacobi:
+            print(f'Input gamma_a = {gamma_a} (~pi/{frac_gamma_a:.1f}) rad')
+            print(f'Output gamma_a = {calc_gamma_a} (~pi/{frac_calc_gamma_a:.1f}) rad')
+            print(f'Output gamma_ab = {calc_gamma_ab} (~pi/{frac_calc_gamma_ab:.1f}) rad')
+        else:
+            print(f'Input gamma_ab = {gamma_ab} (~pi/{frac_gamma_ab:.1f}) rad')
+            print(f'Output gamma_ab = {calc_gamma_ab} (~pi/{frac_calc_gamma_ab:.1f}) rad')
+            print(f'Output gamma_a = {calc_gamma_a} (~pi/{frac_calc_gamma_a:.1f}) rad')
+
+
+    plot_all(R_a, r_a, r_b, r_c, R_b, R_c, gamma_a, gamma_ab, R_a_mag, r_a_mag, R_b_mag, consts, single_jacobi, save_plots)
 
     return
 
