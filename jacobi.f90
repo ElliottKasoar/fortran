@@ -5,7 +5,7 @@ program jacobi
         implicit none
 
         integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
-        real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, theta_ab_integral, &
+        real :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, gamma_ab_integral, &
                 mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
                 single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
                 test_Simpson_integral, test_coord_lims(6), values(9)
@@ -37,16 +37,16 @@ program jacobi
         ! Number of points to generate for MC integration
         mc_n = 10000
 
-        ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, theta_ab_n)
+        ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, gamma_ab_n)
         mixed_jacobi_n = (/ 200, 200, 200 /)
 
-        ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, theta_a_n)
+        ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, gamma_a_n)
         single_jacobi_n = (/ 500, 500, 500 /)
 
         ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
         test_coord_n = (/ 1000, 1000, 1000 /)
 
-        ! Limits of integration (R_a_min, R_a_max, R_b_min, R_b_max, theta_ab_min, thata_ab_max)
+        ! Limits of integration (R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max)
         ! Note: 4.*atan(1.) = pi
         mixed_jacobi_lims = (/ 0., 3., 0., 5., 0., 4.*atan(1.) /)
 
@@ -69,17 +69,17 @@ program jacobi
         call MPI_Barrier(comm, ierr)
         time(2) = MPI_Wtime()
 
-        ! Calculate separable integrals for R_a, R_b and theta_ab using Simpson's rule
+        ! Calculate separable integrals for R_a, R_b and gamma_ab using Simpson's rule
         if (rank == 0) then
                 R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
                         mixed_jacobi_lims(2), .true.)
                 R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
                         mixed_jacobi_lims(4), .true.)
-                theta_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
+                gamma_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
                         mixed_jacobi_lims(5), mixed_jacobi_lims(6), .false.)
 
                 ! Integrals are separable so multiply for total integral
-                mixed_integral = R_a_integral * R_b_integral * theta_ab_integral
+                mixed_integral = R_a_integral * R_b_integral * gamma_ab_integral
                 print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
         end if
 
@@ -92,7 +92,7 @@ program jacobi
         end if
 
         if (rank == 0) then
-                ! Calculate integral for R_a, R_b and theta_ab using Simpson's rule on each in turn
+                ! Calculate integral for R_a, R_b and gamma_ab using Simpson's rule on each in turn
                 mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, &
                 mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false., &
                         sub_comm)
@@ -108,7 +108,7 @@ program jacobi
                 print *, "Integration time: ", t_diff
         end if
 
-        ! Calculate integral for R_a, r_a and theta_a using Simpson's rule on each in turn
+        ! Calculate integral for R_a, r_a and gamma_a using Simpson's rule on each in turn
         single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
                 mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false., comm)
         if (rank == 0) then
@@ -123,7 +123,7 @@ program jacobi
                 print *, "Integration time: ", t_diff
         end if
 
-        ! Calculate integral for R_a, r_a and theta_a using Monte Carlo integration
+        ! Calculate integral for R_a, r_a and gamma_a using Monte Carlo integration
         ! single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, &
         !         mass_c, comm)
         ! if (rank == 0) then
@@ -307,50 +307,15 @@ contains
         end function calculate_r_a
 
 
-        ! Calculate theta_a from R_a, R_b, r_a and gamma_ab
-        function calculate_theta_a(small_r_a, mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
-
-                implicit none
-
-                real, intent(in) :: small_r_a, mu_a, R_a, M_c, R_b, m_b, gamma_ab
-
-                ! coord = theta_a
-                real :: cos_numerator, cos_denominator, cos_coord, coord
-
-                cos_denominator = small_r_a
-
-                ! Temporary to prevent division by 0 - there is probably a better solution!
-                if (cos_denominator < 0.00000001) then
-                        cos_denominator = 0.00000001
-                end if
-
-                cos_numerator = - mu_a * ( (R_a / M_c) + (R_b / m_b) * cos(gamma_ab) )
-
-                cos_coord = cos_numerator / cos_denominator
-
-                ! Temporary to prevent NaN when taking acos - there is probably a better solution!
-                if (cos_coord > 1.) then
-                        cos_coord = 1.
-                end if
-                if (cos_coord < -1.) then
-                        cos_coord = -1.
-                end if
-
-                coord = acos(cos_coord)
-
-        end function calculate_theta_a
-
-
-        ! Calculate theta_a from R_a, r_a and gamma_ab
-        ! R_b is calculated first, and -100. is returned if is does not exist
-        function calculate_theta_a_alt(small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims) &
-                result(coord)
+        ! Calculate gamma_a from R_a, r_a and gamma_ab
+        ! R_b is calculated first, and -100. is returned if it is invalid
+        function calculate_gamma_a(small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims) result(coord)
 
                 implicit none
 
                 real, intent(in) :: small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims(6)
 
-                ! coord = theta_a
+                ! coord = gamma_a
                 real :: cos_numerator, cos_denominator, cos_coord, coord, temp_R_b_1, temp_R_b_2, &
                         R_b_over_m_b, rand_num, round_error
 
@@ -365,9 +330,10 @@ contains
 
                 cos_denominator = small_r_a
 
-                ! Temporary to prevent division by 0 - there is probably a better solution!
-                if (cos_denominator < 0.00000001) then
-                        cos_denominator = 0.00000001
+                ! gamma_a is undefined if either R_a = 0 or r_a = 0
+                if (cos_denominator == 0. .or. R_a == 0.) then
+                        coord = 0.
+                        return
                 end if
 
                 ! Calculate R_b / m_b
@@ -427,7 +393,7 @@ contains
 
                 coord = acos(cos_coord)
 
-        end function calculate_theta_a_alt
+        end function calculate_gamma_a
 
 
         ! Use Simpson's rule to integrate three variables
@@ -448,13 +414,13 @@ contains
 
                 real :: width(3), x, y, z, lims(6), temp_integral, z_integral, y_integral, &
                         partial_integral, total_integral, prev_lims(2), r_lims(3, n(1)+1), &
-                        theta_lims(4, n(1)+1, n(2)+1)
+                        gamma_lims(4, n(1)+1, n(2)+1)
                 integer :: i, j, k, partial_count, count, imin, imax, progress, num_r_values, &
-                        num_theta_values
+                        num_gamma_values
                 logical :: verbose, save_lims
 
                 ! MPI variables
-                integer :: sub_comm_size, ierr, request_1, request_2, r_tag, theta_tag, &
+                integer :: sub_comm_size, ierr, request_1, request_2, r_tag, gamma_tag, &
                         recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
 
                 verbose = .true.
@@ -537,19 +503,19 @@ contains
                                 ! Set value for R_b (mixed), r_a (single) or y (test)
                                 y = lims(3) + real(j) * width(2)
 
-                                ! Total theta_ab, theta_a or z intergral for set
+                                ! Total gamma_ab, gamma_a or z intergral for set
                                 ! (R_a, R_b), (R_a, r_a) or (x, y)
                                 z_integral = 0.
 
-                                ! For single Jacobi, calculate theta_a limits from R_a and r_a
+                                ! For single Jacobi, calculate gamma_a limits from R_a and r_a
                                 if (single_jacobi) then
-                                        prev_lims = lims(5:6)
+                                        ! prev_lims = lims(5:6)
                                         ! lims(5:6) = get_limits(.false., .true., .true., &
                                         !         x, y, mixed_lims, mu_a, m_b, mass_c)
-                                        ! print *, "theta_a min, max estimates: ", lims(5:6)
+                                        ! print *, "gamma_a min, max estimates: ", lims(5:6)
                                         lims(5:6) = get_limits(.false., .true., .false., &
                                                 x, y, mixed_lims, mu_a, m_b, mass_c)
-                                        ! print *, "theta_a min, max analytical: ", lims(5:6)
+                                        ! print *, "gamma_a min, max analytical: ", lims(5:6)
 
                                         ! If unable to find limits, estimate as previous?
                                         if (lims(5) == 0. .and. lims(6) == 0. .and. (i+j+k)>0) then
@@ -558,9 +524,9 @@ contains
                                         end if
 
                                         if (save_lims) then
-                                                theta_lims(1, i+1, j+1) = x
-                                                theta_lims(2, i+1, j+1) = y
-                                                theta_lims(3:4, i+1, j+1) = lims(5:6)
+                                                gamma_lims(1, i+1, j+1) = x
+                                                gamma_lims(2, i+1, j+1) = y
+                                                gamma_lims(3:4, i+1, j+1) = lims(5:6)
                                         end if
                                 end if
 
@@ -572,7 +538,7 @@ contains
 
                                 do k = 0, n(3)
 
-                                        ! Set value for theta_ab (mixed), theta_a (single)
+                                        ! Set value for gamma_ab (mixed), gamma_a (single)
                                         ! or z (test)
                                         z = lims(5) + real(k) * width(3)
 
@@ -598,12 +564,12 @@ contains
 
                                 end do
 
-                                ! Total theta_ab, theta_a or z intergral for set
+                                ! Total gamma_ab, gamma_a or z intergral for set
                                 ! (R_a, R_b), (R_a, r_a) or (x, y)
                                 z_integral = width(3) * z_integral / 3.
 
                                 ! Use Simpon's rule to add contributions for this subinterval
-                                ! Includes multiplication by total theta_ab, theta_a or z integral
+                                ! Includes multiplication by total gamma_ab, gamma_a or z integral
                                 if (mixed_jacobi) then
                                         temp_integral = z_integral * &
                                                 mixed_jacobi_integrand_func(y, .true.)
@@ -653,7 +619,7 @@ contains
 
                 ! Send limits to rank 0 to save
                 r_tag = 0
-                theta_tag = 1
+                gamma_tag = 1
                 if (single_jacobi .and. save_lims) then
                         if (rank == 0) then
                                 ! Receive from all other ranks
@@ -669,9 +635,9 @@ contains
                                         call MPI_Recv(r_lims(:, imin+1:imax+1), num_r_values, &
                                                 MPI_REAL, i, r_tag, sub_comm, recv_status_1, ierr)
 
-                                        num_theta_values = (imax - imin + 1) * 4 * (n(2) + 1)
-                                        call MPI_Recv(theta_lims(:, imin+1:imax+1, :), &
-                                                num_theta_values, MPI_REAL, i, theta_tag, &
+                                        num_gamma_values = (imax - imin + 1) * 4 * (n(2) + 1)
+                                        call MPI_Recv(gamma_lims(:, imin+1:imax+1, :), &
+                                                num_gamma_values, MPI_REAL, i, gamma_tag, &
                                                 sub_comm, recv_status_2, ierr)
                                 end do
                         else
@@ -680,9 +646,9 @@ contains
                                 call MPI_Ssend(r_lims(:, imin+1:imax+1), num_r_values, MPI_REAL, &
                                         0, r_tag, sub_comm, request_1, ierr)
 
-                                num_theta_values = (imax - imin + 1) * 4 * (n(2) + 1)
-                                call MPI_Ssend(theta_lims(:, imin+1:imax+1, :), num_theta_values, &
-                                        MPI_REAL, 0, theta_tag, sub_comm, request_2, ierr)
+                                num_gamma_values = (imax - imin + 1) * 4 * (n(2) + 1)
+                                call MPI_Ssend(gamma_lims(:, imin+1:imax+1, :), num_gamma_values, &
+                                        MPI_REAL, 0, gamma_tag, sub_comm, request_2, ierr)
                         end if
                 end if
 
@@ -707,8 +673,8 @@ contains
                                 open (unit=42, file='outputs/r_lims', form='unformatted')
                                 write(42) r_lims
                                 close (unit=42)
-                                open (unit=43, file='outputs/theta_lims', form='unformatted')
-                                write(43) theta_lims
+                                open (unit=43, file='outputs/gamma_lims', form='unformatted')
+                                write(43) gamma_lims
                                 close (unit=43)
                         end if
                 end if
@@ -729,13 +695,13 @@ contains
                 integer, intent(in) :: sub_comm
 
                 real :: width(3), coords(3), single_lims(6), temp_integral, partial_integral, &
-                        total_integral, r_lims(3, n+1), theta_lims(4, n+1)
+                        total_integral, r_lims(3, n+1), gamma_lims(4, n+1)
                 integer :: i, imin, imax, progress, partial_count, count, num_r_values, &
-                        num_theta_values
+                        num_gamma_values
                 logical :: verbose, save_lims
 
                 ! MPI variables
-                integer :: sub_comm_size, ierr, request_1, request_2, r_tag, theta_tag, &
+                integer :: sub_comm_size, ierr, request_1, request_2, r_tag, gamma_tag, &
                 recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
 
                 verbose = .true.
@@ -798,14 +764,14 @@ contains
                         ! Random r_a in calculated range
                         coords(2) = single_lims(3) + coords(2) * width(2)
 
-                        ! theta_a limits from current R_a and r_a
+                        ! gamma_a limits from current R_a and r_a
                         single_lims(5:6) = get_limits(.false., .true., .true., &
                                 coords(1), coords(2), mixed_lims, mu_a, m_b, mass_c)
 
                         if (save_lims) then
-                                theta_lims(1, i+1) = coords(1)
-                                theta_lims(2, i+1) = coords(2)
-                                theta_lims(3:4, i+1) = single_lims(5:6)
+                                gamma_lims(1, i+1) = coords(1)
+                                gamma_lims(2, i+1) = coords(2)
+                                gamma_lims(3:4, i+1) = single_lims(5:6)
                         end if
 
                         width(3) = abs(single_lims(6) - single_lims(5))
@@ -816,7 +782,7 @@ contains
                                 partial_count = partial_count + 1
                         end if
 
-                        ! Random theta_a in calculated range
+                        ! Random gamma_a in calculated range
                         coords(3) = single_lims(5) + coords(3) * width(3)
 
                         ! Evaluate integral element
@@ -834,7 +800,7 @@ contains
 
                 ! Send limits to rank 0 to save
                 r_tag = 0
-                theta_tag = 1
+                gamma_tag = 1
                 if (save_lims) then
                         if (rank == 0) then
                                 ! Receive from all other ranks
@@ -850,9 +816,9 @@ contains
                                         call MPI_Recv(r_lims(:, imin+1:imax+1), num_r_values, &
                                                 MPI_REAL, i, r_tag, sub_comm, recv_status_1, ierr)
 
-                                        num_theta_values = (imax - imin + 1) * 4
-                                        call MPI_Recv(theta_lims(:, imin+1:imax+1), &
-                                                num_theta_values, MPI_REAL, i, theta_tag, &
+                                        num_gamma_values = (imax - imin + 1) * 4
+                                        call MPI_Recv(gamma_lims(:, imin+1:imax+1), &
+                                                num_gamma_values, MPI_REAL, i, gamma_tag, &
                                                 sub_comm, recv_status_2, ierr)
                                 end do
                         else
@@ -861,9 +827,9 @@ contains
                                 call MPI_Ssend(r_lims(:, imin+1:imax+1), num_r_values, MPI_REAL, &
                                         0, r_tag, sub_comm, request_1, ierr)
 
-                                num_theta_values = (imax - imin + 1) * 4
-                                call MPI_Ssend(theta_lims(:, imin+1:imax+1), num_theta_values, &
-                                        MPI_REAL, 0, theta_tag, sub_comm, request_2, ierr)
+                                num_gamma_values = (imax - imin + 1) * 4
+                                call MPI_Ssend(gamma_lims(:, imin+1:imax+1), num_gamma_values, &
+                                        MPI_REAL, 0, gamma_tag, sub_comm, request_2, ierr)
                         end if
                 end if
 
@@ -883,8 +849,8 @@ contains
                                 open (unit=42, file='outputs/r_lims', form='unformatted')
                                 write(42) r_lims
                                 close (unit=42)
-                                open (unit=43, file='outputs/theta_lims', form='unformatted')
-                                write(43) theta_lims
+                                open (unit=43, file='outputs/gamma_lims', form='unformatted')
+                                write(43) gamma_lims
                                 close (unit=43)
                         end if
                 end if
@@ -894,15 +860,15 @@ contains
 
         ! Estimate the minimum and maximum values of r_a, based on known R_a
         function estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, mass_c, estimating_r_a, &
-                estimating_theta_a, small_r_a) result(single_lims)
+                estimating_gamma_a, small_r_a) result(single_lims)
 
                 implicit none
 
                 real, intent(in) :: R_a, mixed_lims(6), mu_a, m_b, mass_c, small_r_a
-                logical, intent(in) :: estimating_r_a, estimating_theta_a
+                logical, intent(in) :: estimating_r_a, estimating_gamma_a
 
                 real :: test_coord(100000), mixed_coords(3), width(3), single_lims(2), test_r_a, &
-                        temp_theta
+                        temp_gamma
                 integer :: i, j, n, count
                 logical :: random_range
 
@@ -915,10 +881,10 @@ contains
                         n = sqrt(real(size(test_coord)))
                 end if
 
-                ! Generate random R_b and theta_ab (R_a is fixed)
+                ! Generate random R_b and gamma_ab (R_a is fixed)
                 call random_number(mixed_coords(2:3))
 
-                ! Ranges of R_a, R_b and theta_ab
+                ! Ranges of R_a, R_b and gamma_ab
                 width(1) = abs(mixed_lims(2) - mixed_lims(1))
                 width(2) = abs(mixed_lims(4) - mixed_lims(3))
                 width(3) = abs(mixed_lims(6) - mixed_lims(5))
@@ -941,17 +907,17 @@ contains
                                         count = count + 1
                                         test_coord(count) = calculate_r_a(mu_a, mixed_coords(1), &
                                                 mass_c, mixed_coords(2), m_b, mixed_coords(3))
-                                else if (estimating_theta_a) then
+                                else if (estimating_gamma_a) then
 
-                                        ! Attempt to calculate theta from R_a, r_a and theta_ab
-                                        temp_theta = calculate_theta_a_alt(small_r_a, mu_a, &
+                                        ! Attempt to calculate gamma from R_a, r_a and gamma_ab
+                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(3), m_b, &
                                                 mixed_lims)
 
-                                        ! If R_b is invalid, ignore theta calculated
-                                        if (temp_theta /= -100.) then
+                                        ! If R_b is invalid, ignore gamma calculated
+                                        if (temp_gamma /= -100.) then
                                                 count = count + 1
-                                                test_coord(count) = temp_theta
+                                                test_coord(count) = temp_gamma
                                         end if
                                 end if
                         end do
@@ -972,17 +938,17 @@ contains
                                         count = count + 1
                                         test_coord(count) = calculate_r_a(mu_a, mixed_coords(1), &
                                                 mass_c, mixed_coords(2), m_b, mixed_coords(3))
-                                else if (estimating_theta_a) then
+                                else if (estimating_gamma_a) then
 
-                                        ! Attempt to calculate theta from R_a, r_a and theta_ab
-                                        temp_theta = calculate_theta_a_alt(small_r_a, mu_a, &
+                                        ! Attempt to calculate gamma from R_a, r_a and gamma_ab
+                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(3), m_b, &
                                                 mixed_lims)
 
-                                        ! If R_b is invalid, ignore theta calculated
-                                        if (temp_theta /= -100.) then
+                                        ! If R_b is invalid, ignore gamma calculated
+                                        if (temp_gamma /= -100.) then
                                                 count = count + 1
-                                                test_coord(count) = temp_theta
+                                                test_coord(count) = temp_gamma
                                         end if
                                 end if
                         end do
@@ -1002,17 +968,17 @@ contains
                                                         mixed_coords(1), mass_c, mixed_coords(2), &
                                                         m_b, mixed_coords(3))
                                                 count = count + 1
-                                        else if (estimating_theta_a) then
-                                                ! Attempt to calculate theta from
-                                                ! R_a, r_a and theta_ab
-                                                temp_theta = calculate_theta_a_alt(small_r_a, &
-                                                        mu_a, mixed_coords(1), mass_c, &
-                                                        mixed_coords(3), m_b, mixed_lims)
+                                        else if (estimating_gamma_a) then
+                                                ! Attempt to calculate gamma from
+                                                ! R_a, r_a and gamma_ab
+                                                temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
+                                                        mixed_coords(1), mass_c, mixed_coords(3), &
+                                                        m_b, mixed_lims)
 
-                                                ! If R_b is invalid, ignore theta calculated
-                                                if (temp_theta /= -100.) then
+                                                ! If R_b is invalid, ignore gamma calculated
+                                                if (temp_gamma /= -100.) then
                                                         count = count + 1
-                                                        test_coord(count) = temp_theta
+                                                        test_coord(count) = temp_gamma
                                                 end if
 
                                         end if
@@ -1031,17 +997,17 @@ contains
         end function estimate_jacobi_lims
 
 
-        function get_limits(get_r_lims, get_theta_lims, estimate_lims, R_a, small_r_a, &
+        function get_limits(get_r_lims, get_gamma_lims, estimate_lims, R_a, small_r_a, &
                 mixed_lims, mu_a, m_b, mass_c) result(lims)
 
                 implicit none
 
                 real, intent(in) :: R_a, small_r_a, mixed_lims(6), mu_a, m_b, mass_c
-                logical, intent(in) :: get_r_lims, get_theta_lims, estimate_lims
+                logical, intent(in) :: get_r_lims, get_gamma_lims, estimate_lims
 
                 real :: lims(2), round_error
 
-                if (get_r_lims .and. get_theta_lims) then
+                if (get_r_lims .and. get_gamma_lims) then
                         print *, "Only one coordinate flag should be set to true"
                         stop
                 end if
@@ -1053,36 +1019,36 @@ contains
                                 lims(1:2) = estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, &
                                         mass_c, .true., .false., 0.)
                         else
-                                ! r_a_min uses R_a_min, R_b_min, theta_ab_max
-                                ! (r smaller with larger theta
+                                ! r_a_min uses R_a_min, R_b_min, gamma_ab_max
+                                ! (r smaller with larger gamma
                                 ! although no effect for R_a = R_b = 0)
                                 lims(1) = calculate_r_a(mu_a, mixed_lims(1), mass_c, &
                                         mixed_lims(3), m_b, mixed_lims(6))
 
                                 ! r_a_max depends on max current (single) R_a
-                                ! Also uses full (mixed) R_b_max and theta_ab_min
+                                ! Also uses full (mixed) R_b_max and gamma_ab_min
                                 lims(2) = calculate_r_a(mu_a, R_a, mass_c, mixed_lims(4), &
                                         m_b, mixed_lims(5))
                         end if
 
-                else if (get_theta_lims) then
+                else if (get_gamma_lims) then
                         if (estimate_lims) then
                                 lims(1:2) = estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, &
                                         mass_c, .false., .true., small_r_a)
                         else
 
-                                ! theta_a is undefined for R_a = 0 or r_a = 0
+                                ! gamma_a is undefined for R_a = 0 or r_a = 0
                                 if (R_a == 0. .or. small_r_a == 0.) then
                                         lims(1) = 0.
                                         lims(2) = 0.
                                 else
-                                        ! Calculate cos(theta_a) when R_b is maximum
+                                        ! Calculate cos(gamma_a) when R_b is maximum
                                         lims(1) = mass_c * mu_a * ((mixed_lims(4) / m_b )**2. &
                                                 - (R_a / mass_c)**2. - (small_r_a / mu_a)**2.) &
                                                 / (2. * R_a * small_r_a)
 
-                                        ! There may be no valid cos(theta_a) for maximum R_b
-                                        ! In this case, theta_a spans full range
+                                        ! There may be no valid cos(gamma_a) for maximum R_b
+                                        ! In this case, gamma_a spans full range
                                         if (lims(1) > 1.) then
                                                 lims(1) = 0.
                                         else if (lims(1) < -1.) then
@@ -1097,9 +1063,8 @@ contains
                                                 lims(1) = acos(lims(1))
                                         end if
 
-                                        ! theta_a_max = pi
-                                        lims(2) = calculate_theta_a(small_r_a, mu_a, R_a, mass_c, &
-                                                mixed_lims(4), m_b, mixed_lims(5))
+                                        ! Max value of gamma_a = pi
+                                        lims(2) = 4.*atan(1.)
                                 end if
                         end if
                 end if
