@@ -309,23 +309,30 @@ contains
 
         ! Calculate gamma_a from R_a, r_a and gamma_ab
         ! R_b is calculated first, and -100. is returned if it is invalid
-        function calculate_gamma_a(small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims) result(coord)
+        function calculate_gamma_a(small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims, rand_root, &
+                pos_root) result(coord)
 
                 implicit none
 
                 real, intent(in) :: small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims(6)
+                logical, intent(in) :: rand_root, pos_root
 
+                logical :: positive_root
                 ! coord = gamma_a
                 real :: cos_numerator, cos_denominator, cos_coord, coord, temp_R_b_1, temp_R_b_2, &
                         R_b_over_m_b, rand_num, round_error
 
-                logical :: positive_root
+                round_error = 0.00001
 
-                call random_number(rand_num)
-                if (rand_num > 0.5) then
-                        positive_root = .true.
+                if (rand_root) then
+                        call random_number(rand_num)
+                        if (rand_num > 0.5) then
+                                positive_root = .true.
+                        else
+                                positive_root = .true.
+                        end if
                 else
-                        positive_root = .false.
+                        positive_root = pos_root
                 end if
 
                 cos_denominator = small_r_a
@@ -365,7 +372,6 @@ contains
 
                         if ( (R_b_over_m_b < lims(3) / m_b) &
                         .or. (R_b_over_m_b > lims(4) / m_b) ) then
-                                round_error = 0.000001
                                 if (R_b_over_m_b > lims(4) / m_b &
                                 .and. R_b_over_m_b < round_error + lims(4) / m_b) then
                                         R_b_over_m_b = lims(4) / m_b
@@ -737,7 +743,8 @@ contains
 
                         if ((imax - imin >= 4) .and. verbose) then
                                 progress = 100 * (i - imin) / (imax - imin)
-                                if (mod((i - imin), (imax - imin + 1) / 5) == 0 .or. i == imax) then
+                                if (mod((i - imin), (imax - imin + 1) / 5) == 0 &
+                                .or. i == imax) then
                                         print *, "On rank", rank, "...Progress... ", progress, "%"
                                 end if
                         end if
@@ -912,7 +919,7 @@ contains
                                         ! Attempt to calculate gamma from R_a, r_a and gamma_ab
                                         temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(3), m_b, &
-                                                mixed_lims)
+                                                mixed_lims, .true., .true.)
 
                                         ! If R_b is invalid, ignore gamma calculated
                                         if (temp_gamma /= -100.) then
@@ -943,7 +950,7 @@ contains
                                         ! Attempt to calculate gamma from R_a, r_a and gamma_ab
                                         temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(3), m_b, &
-                                                mixed_lims)
+                                                mixed_lims, .true., .true.)
 
                                         ! If R_b is invalid, ignore gamma calculated
                                         if (temp_gamma /= -100.) then
@@ -973,7 +980,7 @@ contains
                                                 ! R_a, r_a and gamma_ab
                                                 temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
                                                         mixed_coords(1), mass_c, mixed_coords(3), &
-                                                        m_b, mixed_lims)
+                                                        m_b, mixed_lims, .true., .true.)
 
                                                 ! If R_b is invalid, ignore gamma calculated
                                                 if (temp_gamma /= -100.) then
@@ -1005,7 +1012,7 @@ contains
                 real, intent(in) :: R_a, small_r_a, mixed_lims(6), mu_a, m_b, mass_c
                 logical, intent(in) :: get_r_lims, get_gamma_lims, estimate_lims
 
-                real :: lims(2), round_error
+                real :: lims(2), round_error, temp_gamma
 
                 if (get_r_lims .and. get_gamma_lims) then
                         print *, "Only one coordinate flag should be set to true"
@@ -1043,6 +1050,7 @@ contains
                                         lims(2) = 0.
                                 else
                                         ! Calculate cos(gamma_a) when R_b is maximum
+                                        ! to get the minimum gamma_a
                                         lims(1) = mass_c * mu_a * ((mixed_lims(4) / m_b )**2. &
                                                 - (R_a / mass_c)**2. - (small_r_a / mu_a)**2.) &
                                                 / (2. * R_a * small_r_a)
@@ -1052,10 +1060,9 @@ contains
                                         if (lims(1) > 1.) then
                                                 lims(1) = 0.
                                         else if (lims(1) < -1.) then
-                                                ! Allow for rounding errors
-                                                if (lims(1) > -1. - round_error) then
-                                                        lims(1) = -1.
-                                                        lims(1) = acos(lims(1))
+                                                ! Allow for rounding errors near pi
+                                                if (lims(1) > -(1.+round_error)) then
+                                                        lims(1) = acos(-1.)
                                                 else
                                                         lims(1) = 0.
                                                 end if
@@ -1063,8 +1070,36 @@ contains
                                                 lims(1) = acos(lims(1))
                                         end if
 
-                                        ! Max value of gamma_a = pi
-                                        lims(2) = 4.*atan(1.)
+                                        ! Get upper limit, starting at lower limit
+                                        lims(2) = lims(1)
+
+                                        ! Test gamma_ab minimum for +- roots
+                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                                mass_c, mixed_lims(5), m_b, mixed_lims, .false., &
+                                                .true.)
+                                        if (temp_gamma /= -100.) then
+                                                lims(2) = temp_gamma
+                                        end if
+                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                                mass_c, mixed_lims(5), m_b, mixed_lims, .false., &
+                                                .false.)
+                                        if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
+                                                lims(2) = temp_gamma
+                                        end if
+
+                                        ! Test gamma_ab maximum for +- roots
+                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                                mass_c, mixed_lims(6), m_b, mixed_lims, .false., &
+                                                .true.)
+                                        if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
+                                                lims(2) = temp_gamma
+                                        end if
+                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                                mass_c, mixed_lims(6), m_b, mixed_lims, .false., &
+                                                .false.)
+                                        if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
+                                                lims(2) = temp_gamma
+                                        end if
                                 end if
                         end if
                 end if
