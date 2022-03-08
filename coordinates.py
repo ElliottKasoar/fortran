@@ -265,13 +265,14 @@ def main():
     mass_b = 1
     mass_c = 1
 
-    # Used for single Jacobi
+    # Used for single and mixed Jacobi
     R_a_mag = 2.97
+
+    # Used for single Jacobi
     r_a_mag = 5.66
     gamma_a = np.pi / 3
 
     # Used for mixed Jacobi
-    R_a_mag = 2.97
     R_b_mag = 4.5
     gamma_ab = 2.7
 
