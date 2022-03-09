@@ -1044,6 +1044,10 @@ contains
                                         mass_c, .false., .true., small_r_a)
                         else
 
+                                ! Note: This option may not work for all R_a and R_b limits
+                                ! gamma_ab must run between 0 and pi
+                                ! Use with caution
+
                                 ! gamma_a is undefined for R_a = 0 or r_a = 0
                                 if (R_a == 0. .or. small_r_a == 0.) then
                                         lims(1) = 0.
