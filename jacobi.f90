@@ -506,6 +506,10 @@ contains
 
                         do j = 0, n(2)
 
+                                if (width(2) == 0.) then
+                                        exit
+                                end if
+
                                 ! Set value for R_b (mixed), r_a (single) or y (test)
                                 y = lims(3) + real(j) * width(2)
 
@@ -543,6 +547,10 @@ contains
                                 width(3) = abs(lims(6) - lims(5)) / real(n(3))
 
                                 do k = 0, n(3)
+
+                                        if (width(3) == 0.) then
+                                                exit
+                                        end if
 
                                         ! Set value for gamma_ab (mixed), gamma_a (single)
                                         ! or z (test)
