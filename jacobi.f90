@@ -254,11 +254,11 @@ contains
         ! Returns R_a^2 R_b^2 cos^2(gamma_ab) R_a^2 r_a^2 sin(gamma_a)
         ! R_b and gamma_ab are rewritten in terms of R_a, r_a and gamma_a
         ! R_a = x, r_a = y and gamma_a = z
-        function single_jacobi_integrand_func(x, y, z, mu_a, M_c, m_b) result(integrand)
+        function single_jacobi_integrand_func(x, y, z, mu_a, mass_c, m_b) result(integrand)
 
                 implicit none
 
-                real, intent(in) :: x, y, z, mu_a, M_c, m_b
+                real, intent(in) :: x, y, z, mu_a, mass_c, m_b
 
                 real :: integrand, integrand_volume, integrand_R_a, integrand_R_b, &
                         integrand_gamma_ab
@@ -271,8 +271,8 @@ contains
                 integrand_R_a = x**2.
 
                 ! R_b^2
-                integrand_R_b = m_b**2. * ( (x / M_c)**2. + (y / mu_a)**2. + &
-                        2. * x * y * cos(z) / (mu_a * M_c) )
+                integrand_R_b = m_b**2. * ( (x / mass_c)**2. + (y / mu_a)**2. + &
+                        2. * x * y * cos(z) / (mu_a * mass_c) )
 
                 ! cos(gamma_ab)^2
                 ! Undefined for R_a or R_b = 0, but integrand = 0 anyway
@@ -281,7 +281,7 @@ contains
                         integrand_gamma_ab = 0.
                 else
                         integrand_gamma_ab = (m_b / sqrt(integrand_R_b)) * &
-                        (-((y * cos(z) / mu_a) + x / M_c ))
+                        (-((y * cos(z) / mu_a) + x / mass_c ))
 
                         integrand_gamma_ab = integrand_gamma_ab**2.
                 end if
@@ -292,29 +292,29 @@ contains
 
 
         ! Calculate r_a from R_a, R_b and gamma_ab
-        function calculate_r_a(mu_a, R_a, M_c, R_b, m_b, gamma_ab) result(coord)
+        function calc_r_a(R_a, R_b, gamma_ab, mu_a, m_b, mass_c) result(coord)
 
                 implicit none
 
-                real, intent(in) :: mu_a, R_a, M_c, R_b, m_b, gamma_ab
+                real, intent(in) :: R_a, R_b, gamma_ab, mu_a, m_b, mass_c
 
                 ! coord = r_a
                 real :: coord
 
-                coord = mu_a * sqrt( (R_a / M_c)**2.  + (R_b / m_b)**2. &
-                        + 2. * (R_a * R_b * cos(gamma_ab) / (M_c * m_b)) )
+                coord = mu_a * sqrt( (R_a / mass_c)**2.  + (R_b / m_b)**2. &
+                        + 2. * (R_a * R_b * cos(gamma_ab) / (mass_c * m_b)) )
 
-        end function calculate_r_a
+        end function calc_r_a
 
 
         ! Calculate gamma_a from R_a, r_a and gamma_ab
         ! R_b is calculated first, and -100. is returned if it is invalid
-        function calculate_gamma_a(small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims, rand_root, &
+        function calculate_gamma_a(small_r_a, mu_a, R_a, mass_c, gamma_ab, m_b, lims, rand_root, &
                 pos_root) result(coord)
 
                 implicit none
 
-                real, intent(in) :: small_r_a, mu_a, R_a, M_c, gamma_ab, m_b, lims(6)
+                real, intent(in) :: small_r_a, mu_a, R_a, mass_c, gamma_ab, m_b, lims(6)
                 logical, intent(in) :: rand_root, pos_root
 
                 logical :: positive_root
@@ -344,7 +344,7 @@ contains
                 end if
 
                 ! Calculate R_b / m_b
-                temp_R_b_1 = (cos_denominator / mu_a)**2. + (R_a / M_c)**2. * &
+                temp_R_b_1 = (cos_denominator / mu_a)**2. + (R_a / mass_c)**2. * &
                         (cos(gamma_ab)**2. - 1.)
 
                 ! Must be positive as will be square rooted
@@ -352,7 +352,7 @@ contains
                         coord = -100.
                         return
                 else
-                        temp_R_b_2 = - (R_a / M_c) * cos(gamma_ab)
+                        temp_R_b_2 = - (R_a / mass_c) * cos(gamma_ab)
                         if (positive_root) then
                                 R_b_over_m_b = temp_R_b_2 + sqrt(temp_R_b_1)
                         else
@@ -385,7 +385,7 @@ contains
                         end if
                 end if
 
-                cos_numerator = - mu_a * ( (R_a / M_c) + R_b_over_m_b * cos(gamma_ab) )
+                cos_numerator = - mu_a * ( (R_a / mass_c) + R_b_over_m_b * cos(gamma_ab) )
 
                 cos_coord = cos_numerator / cos_denominator
 
@@ -912,8 +912,8 @@ contains
 
                                 if (estimating_r_a) then
                                         count = count + 1
-                                        test_coord(count) = calculate_r_a(mu_a, mixed_coords(1), &
-                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
+                                        test_coord(count) = calc_r_a(mixed_coords(1), &
+                                        mixed_coords(2), mixed_coords(3), mu_a, m_b, mass_c)
                                 else if (estimating_gamma_a) then
 
                                         ! Attempt to calculate gamma from R_a, r_a and gamma_ab
@@ -943,8 +943,9 @@ contains
 
                                 if (estimating_r_a) then
                                         count = count + 1
-                                        test_coord(count) = calculate_r_a(mu_a, mixed_coords(1), &
-                                                mass_c, mixed_coords(2), m_b, mixed_coords(3))
+                                        test_coord(count) = calc_r_a(mixed_coords(1), &
+                                                mixed_coords(2), mixed_coords(3), mu_a, m_b, &
+                                                mass_c)
                                 else if (estimating_gamma_a) then
 
                                         ! Attempt to calculate gamma from R_a, r_a and gamma_ab
@@ -971,9 +972,9 @@ contains
                                                 width(3) / real(n))
 
                                         if (estimating_r_a) then
-                                                test_coord(count) = calculate_r_a(mu_a, &
-                                                        mixed_coords(1), mass_c, mixed_coords(2), &
-                                                        m_b, mixed_coords(3))
+                                                test_coord(count) = calc_r_a(mixed_coords(1), &
+                                                        mixed_coords(2), mixed_coords(3), mu_a, &
+                                                        m_b, mass_c)
                                                 count = count + 1
                                         else if (estimating_gamma_a) then
                                                 ! Attempt to calculate gamma from
@@ -1029,13 +1030,13 @@ contains
                                 ! r_a_min uses R_a_min, R_b_min, gamma_ab_max
                                 ! (r smaller with larger gamma
                                 ! although no effect for R_a = R_b = 0)
-                                lims(1) = calculate_r_a(mu_a, mixed_lims(1), mass_c, &
-                                        mixed_lims(3), m_b, mixed_lims(6))
+                                lims(1) = calc_r_a(mixed_lims(1), mixed_lims(3), mixed_lims(6), &
+                                        mu_a, m_b, mass_c)
 
                                 ! r_a_max depends on max current (single) R_a
                                 ! Also uses full (mixed) R_b_max and gamma_ab_min
-                                lims(2) = calculate_r_a(mu_a, R_a, mass_c, mixed_lims(4), &
-                                        m_b, mixed_lims(5))
+                                lims(2) = calc_r_a(R_a, mixed_lims(4), mixed_lims(5), mu_a, m_b, &
+                                        mass_c)
                         end if
 
                 else if (get_gamma_lims) then
