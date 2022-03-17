@@ -619,6 +619,7 @@ contains
                 amps(i, k) = integrate_double_Simpson(simpson_n, lims, boundary_val, mu_1, m_1, &
                     mass_c, single_coords, config_a, channel_func_1, single_func_1, &
                     channel_func_2, single_func_2)
+                amps(i, k) = amps(i, k) / boundary_val
             end do
         end do
 
