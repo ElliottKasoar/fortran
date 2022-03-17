@@ -4,7 +4,7 @@ program transform
 
     implicit none
 
-    integer :: simpson_n(3), i, k, num_channels, num_basis_funcs, nc1
+    integer :: simpson_n(3), i, k, num_channel_funcs, num_basis_funcs, nc1
     real :: lims(6), integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
         values(9)
     logical :: save_inputs
@@ -57,12 +57,12 @@ program transform
     call MPI_Barrier(comm, ierr)
     time(2) = MPI_Wtime()
 
-    num_channels = 5
+    num_channel_funcs = 5
     num_basis_funcs = 5
     nc1 = 3
 
-    call transform_all_amps(num_channels, num_basis_funcs, nc1, simpson_n, lims, mu_a, mu_b, m_a, &
-        m_b, mass_c, comm)
+    call transform_all_amps(num_channel_funcs, num_basis_funcs, nc1, simpson_n, lims, mu_a, mu_b, &
+        m_a, m_b, mass_c, comm)
 
     ! Check the timer after transformation, at end of program
     call MPI_Barrier(comm, ierr)
@@ -108,63 +108,98 @@ contains
 
     end subroutine calc_masses
 
-
-    function get_single_phi(i, x, r, gamma, config_a) result(func)
+    ! Channel functions (phi or theta) in single Jacobi coordinates
+    ! If config_a, x = R_a, r = r_a and gamma = gamma_a
+    ! Else x = R_b, r = r_b and gamma = gamma_b
+    function get_single_phi(i, x, r, gamma, config_a, conj) result(func)
 
         implicit none
 
         integer, intent(in) :: i
         real, intent(in) :: x, r, gamma
-        logical, intent(in) :: config_a
+        logical, intent(in) :: config_a, conj
 
         real :: func
 
-        func = 1.
+        if (config_a) then
+            ! phi defined for 1 to nc1 (=3)
+            func = (x * r * cos(gamma)**2.)**(1./real(i))
+        else
+            ! theta defined for 1 to nc2 (=nc-nc1=2)
+            func = (x * r * sin(gamma)**2.)**(1./real(i))
+        end if
 
     end function get_single_phi
 
 
-    function get_mixed_phi(n, x, y, z, config_a) result(func)
+    ! Channel functions (phi or theta) in mixed Jacobi coordinates
+    ! If config_a, x = R_a, y = R_b and z = gamma_ab
+    ! Else x = R_b, y = R_a and z = gamma_ab
+    function get_mixed_phi(i, x, y, z, config_a, conj) result(func)
 
         implicit none
 
-        integer, intent(in) :: n
+        integer, intent(in) :: i
         real, intent(in) :: x, y, z
-        logical, intent(in) :: config_a
+        logical, intent(in) :: config_a, conj
 
         real :: func
 
-        func = 1.
+        if (config_a) then
+            ! phi defined for 1 to nc1 (=3)
+            func = (x * y * cos(z)**2.)**(1./real(i))
+        else
+            ! theta defined for 1 to nc2 (=nc-nc1=2)
+            func = (x * y * sin(z)**2.)**(1./real(i))
+        end if
 
     end function get_mixed_phi
 
 
-    function get_single_psi(m, x, r, gamma, config_a) result(func)
+    ! Basis functions in single Jacobi coordinates
+    ! If config_a, x = R_a, r = r_a and gamma = gamma_a
+    ! Else x = R_b, r = r_b and gamma = gamma_b
+    function get_single_psi(k, x, r, gamma, config_a, conj) result(func)
 
         implicit none
 
-        integer, intent(in) :: m
+        integer, intent(in) :: k
         real, intent(in) :: x, r, gamma
-        logical, intent(in) :: config_a
+        logical, intent(in) :: config_a, conj
 
         real :: func
 
-        func = 1.
+        if (config_a) then
+            ! psi defined for 1 to nc1 (=3)
+            func = (x * r * cos(gamma)**2.)**(1./real(k))
+        else
+            ! psi defined for 1 to nc2 (=nc-nc1=2)
+            func = (x * r * sin(gamma)**2.)**(1./real(k))
+        end if
 
     end function get_single_psi
 
 
-    function get_mixed_psi(k, x, y, z, config_a) result(func)
+    ! Basis functions in mixed Jacobi coordinates
+    ! If config_a, x = R_a, y = R_b and z = gamma_ab
+    ! Else x = R_b, y = R_a and z = gamma_ab
+    function get_mixed_psi(k, x, y, z, config_a, conj) result(func)
 
         implicit none
 
         integer, intent(in) :: k
         real, intent(in) :: x, y, z
-        logical, intent(in) :: config_a
+        logical, intent(in) :: config_a, conj
 
         real :: func
 
-        func = 1.
+        if (config_a) then
+            ! psi defined for 1 to nc1 (=3)
+            func = (x * y * cos(z)**2.)**(1./real(k))
+        else
+            ! psi defined for 1 to nc2 (=nc-nc1=2)
+            func = (x * y * sin(z)**2.)**(1./real(k))
+        end if
 
     end function get_mixed_psi
 
@@ -174,15 +209,17 @@ contains
     ! For config_a x = R_b, y = R_a and z = gamma_ab
     ! x is not integrated over, but the integrand may be a function of x
     function integrand_func(x, y, z, mu_a, mass_c, m_b, single_coords, i, j, config_a, &
-        channel_func) result(total_integrand)
+        channel_func_1, single_func_1, channel_func_2, single_func_2) result(total_integrand)
 
             implicit none
 
             integer, intent(in) :: i, j
             real, intent(in) :: x, y, z, mu_a, mass_c, m_b, single_coords(2)
-            logical, intent(in) :: config_a, channel_func
+            logical, intent(in) :: config_a, channel_func_1, single_func_1, channel_func_2, &
+                single_func_2
 
             real :: total_integrand, integrand_volume, integrand_1, integrand_2, r, gamma
+            logical :: conj
 
             ! Single Jacobi coordinates
             r = single_coords(1)
@@ -192,13 +229,39 @@ contains
             integrand_volume = y**2. * sin(z)
 
             ! Function to be integrated:
-            if (channel_func) then
-                integrand_1 = get_single_phi(i, x, r, gamma, config_a)
-                integrand_2 = get_mixed_phi(j, x, y, z, config_a)
+
+            ! To do: check if i, j are correct in all cases or need to add nc1 etc.
+
+            conj = .true.
+            if (channel_func_1) then
+                if (single_func_1) then
+                    integrand_1 = get_single_phi(i, x, r, gamma, config_a, conj)
+                else
+                    integrand_1 = get_mixed_phi(i, x, y, z, config_a, conj)
+                end if
             else
-                integrand_1 = get_single_psi(i, x, r, gamma, config_a)
-                integrand_2 = get_mixed_psi(j, x, y, z, config_a)
+                if (single_func_1) then
+                    integrand_1 = get_single_psi(i, x, r, gamma, config_a, conj)
+                else
+                    integrand_1 = get_mixed_psi(i, x, y, z, config_a, conj)
+                end if
             end if
+
+            conj = .false.
+            if (channel_func_2) then
+                if (single_func_2) then
+                    integrand_2 = get_single_phi(j, x, r, gamma, config_a, conj)
+                else
+                    integrand_2 = get_mixed_phi(j, x, y, z, config_a, conj)
+                end if
+            else
+                if (single_func_2) then
+                    integrand_2 = get_single_psi(j, x, r, gamma, config_a, conj)
+                else
+                    integrand_2 = get_mixed_psi(j, x, y, z, config_a, conj)
+                end if
+            end if
+
             total_integrand = integrand_volume * integrand_1 * integrand_2
 
     end function integrand_func
@@ -207,17 +270,18 @@ contains
     ! Use Simpson's rule to integrate f(x,y,z) over two variables: y and z
     ! x is input at a fixed value
     function integrate_double_Simpson(n, lims, x, mu_1, m_1, mass_c, single_coords, config_a, &
-        channel_func) result(total_integral)
+        channel_func_1, single_func_1, channel_func_2, single_func_2) result(total_integral)
 
             implicit none
 
             integer, intent(in) :: n(2)
             real, intent(in) :: lims(4), x, mu_1, m_1, mass_c, &
                 single_coords(2, n(1)+1, n(2)+1)
-            logical, intent(in) :: config_a, channel_func
+            logical, intent(in) :: config_a, channel_func_1, single_func_1, channel_func_2, &
+                single_func_2
 
-            real :: width(2), y, z, temp_integral, z_integral, total_integral, test_coords(3)
-            integer :: i, j, progress
+            real :: width(2), y, z, temp_integral, z_integral, total_integral
+            integer :: i, j
             logical :: verbose
 
             verbose = .true.
@@ -227,13 +291,12 @@ contains
 
             width(1) = abs(lims(2) - lims(1)) / real(n(1))
 
-            ! print *, "coords", single_coords
-
             ! Integrate each variable in turn, covering full limits
             ! Variables labelled x, y and z for simplicity
             do i = 0, n(1)
 
-                    ! Set value for R_b at fixed R_a
+                    ! Set value for R_b at fixed R_a (config_a)
+                    !or R_a at fixed R_b (not config_a)
                     y = lims(1) + real(i) * width(1)
 
                     ! Total gamma_ab integral given R_a and R_b
@@ -245,14 +308,10 @@ contains
                             width(2) = abs(lims(4) - lims(3)) / real(n(2))
                             z = lims(3) + real(j) * width(2)
 
-                            ! test_coords = transform_mixed_to_single(x, y, z, mu_1, m_1, &
-                            !     mass_c, .true.)
-                            ! print *, "TEST", test_coords
-                            ! print *, "INPUT", single_coords(:, i+1, j+1)
-
                             ! Evaluate integral at this point
                             temp_integral = integrand_func(x, y, z, mu_a, mass_c, m_b, &
-                                single_coords(:, i+1, j+1), i+1, j+1, config_a, channel_func)
+                                single_coords(:, i+1, j+1), i+1, j+1, config_a, channel_func_1, &
+                                single_func_1, channel_func_2, single_func_2)
 
                             if (j == 0 .or. j == n(2)) then
                                     z_integral = z_integral + temp_integral
@@ -264,8 +323,7 @@ contains
 
                     end do
 
-                    ! Total gamma_ab, gamma_a or z intergral for set
-                    ! (R_a, R_b), (R_a, r_a) or (x, y)
+                    ! Total gamma_ab intergral for given R_a and R_b
                     z_integral = width(2) * z_integral / 3.
 
                     ! Use Simpon's rule to add contributions for this subinterval
@@ -391,60 +449,28 @@ contains
     ! Choice of single coordinates is determined by the config_a flag
     ! Grid defined by limits [R_a_min, R_a_max, R_b_min, R_b_max, gammab_a_min, gamma_ab_max]
     ! and number of points in each coordinate [n_R_a, n_R_b, n_gamma_ab]
-    function transform_grid(lims, n, mu_1, m_1, mass_c, config_a) result(single_coords)
+    function transform_grid(R_1, lims, n, mu_1, m_1, mass_c, config_a) result(single_coords)
 
         implicit none
 
-        integer, intent(in) :: n(3)
-        real, intent(in) :: lims(6), mu_1, m_1, mass_c
+        integer, intent(in) :: n(2)
+        real, intent(in) :: R_1, lims(4), mu_1, m_1, mass_c
         logical, intent(in) :: config_a
 
         integer :: i, j, k
-        real :: R_a(n(1)+1), R_b(n(2)+1), gamma_ab(n(3)+1), width(3), &
-            single_coords(3, n(1)+1, n(2)+1, n(3)+1)
+        real :: R_2, gamma_ab, width(2), single_coords(3, n(1)+1, n(2)+1)
 
         ! Spacing between points for each coordinate
-        if (config_a) then
-            width(2) = abs(lims(4) - lims(3)) / real(n(2))
-            width(3) = abs(lims(6) - lims(5)) / real(n(3))
-        else
-            width(1) = abs(lims(2) - lims(1)) / real(n(1))
-            width(3) = abs(lims(6) - lims(5)) / real(n(3))
-        end if
+        width(1) = abs(lims(2) - lims(1)) / real(n(1))
+        width(2) = abs(lims(4) - lims(3)) / real(n(2))
 
-        ! Loop over R_a values
+        ! Loop over R_b (config_a) or R_b (not config_a) values
         do i = 0, n(1)
-
-            if (config_a) then
-                R_a(i+1) = lims(2)
-            else
-                R_a(i+1) = lims(1) + real(i) * width(1)
-            end if
-
-            ! Loop over R_b values
+            R_2 = lims(1) + real(i) * width(1)
             do j = 0, n(2)
-
-                if (config_a) then
-                    R_b(j+1) = lims(3) + real(j) * width(2)
-                else
-                    R_b(j+1) = lims(4)
-                end if
-
-                ! Loop over gamma_ab values
-                do k = 0, n(3)
-
-                    gamma_ab(k+1) = lims(5) + real(k) * width(3)
-
-                    ! Calculate single Jacobi coordinates at these mixed coordinates
-                    if (config_a) then
-                        single_coords(:, i+1, j+1, k+1) = transform_mixed_to_single(R_a(i+1), &
-                            R_b(j+1), gamma_ab(k+1), mu_1, m_1, mass_c, config_a)
-                    else
-                        single_coords(:, i+1, j+1, k+1) = transform_mixed_to_single(R_b(j+1), &
-                            R_a(i+1), gamma_ab(k+1), mu_1, m_1, mass_c, config_a)
-                    end if
-
-                end do
+                gamma_ab = lims(3) + real(j) * width(2)
+                single_coords(:, i+1, j+1) = transform_mixed_to_single(R_1, R_2, gamma_ab, mu_1, &
+                    m_1, mass_c, config_a)
             end do
         end do
 
@@ -452,21 +478,21 @@ contains
 
 
     ! Transform surface amplitudes w_ik from mixed to single Jacobi coordinates
-    function transform_amps(old_amps, num_channels, num_basis_funcs, simpson_n, lims, mu_1, m_1, &
-        mass_c, single_coords, config_a, sub_comm) result(amps)
+    function transform_amps(old_amps, num_channel_funcs, num_basis_funcs, simpson_n, lims, mu_1, &
+        m_1, mass_c, single_coords, boundary_val, config_a, sub_comm) result(amps)
 
-        integer, intent(in) :: num_channels, num_basis_funcs, simpson_n(3)
-        real, intent(in) :: old_amps(num_channels, num_basis_funcs), lims(6), mu_1, m_1, mass_c, &
-            single_coords(3, simpson_n(1)+1, simpson_n(2)+1, simpson_n(3)+1)
+        integer, intent(in) :: num_channel_funcs, num_basis_funcs, simpson_n(2)
+        real, intent(in) :: old_amps(num_channel_funcs, num_basis_funcs), lims(4), mu_1, m_1, &
+            mass_c, single_coords(3, simpson_n(1)+1, simpson_n(2)+1), boundary_val
         logical, intent(in) :: config_a
 
         ! MPI variables
         integer, intent(in) :: sub_comm
 
-        integer :: i, k, n, m, imin, imax, progress, num_values, simpson_n_1(2)
-        real :: boundary_val, integral_1(num_channels), integral_2(num_basis_funcs), &
-            amps(num_channels, num_basis_funcs), lims_1(4)
-        logical :: verbose, channel_func
+        integer :: i, k, n, m, imin, imax, progress, num_values
+        real :: integral_1(num_channel_funcs), integral_2(num_basis_funcs), &
+            amps(num_channel_funcs, num_basis_funcs)
+        logical :: verbose, channel_func_1, single_func_1, channel_func_2, single_func_2
 
         ! MPI variables
         integer :: sub_comm_size, ierr, request, recv_status(MPI_STATUS_SIZE)
@@ -475,34 +501,19 @@ contains
 
         verbose = .true.
 
-        if (config_a) then
-            boundary_val = lims(2)
-            simpson_n_1(1) = simpson_n(2)
-            simpson_n_1(2) = simpson_n(3)
-            lims_1(1:2) = lims(3:4)
-            lims_1(3:4) = lims(5:6)
-        else
-            ! R_b boundary
-            boundary_val = lims(4)
-            simpson_n_1(1) = simpson_n(1)
-            simpson_n_1(2) = simpson_n(3)
-            lims_1(1:2) = lims(1:2)
-            lims_1(3:4) = lims(5:6)
-        end if
-
         ! Initialise amps array
-        do i = 1, num_channels
+        do i = 1, num_channel_funcs
             do k = 1, num_basis_funcs
                 amps(i, k) = 0.
             end do
         end do
 
-        ! Divide calculation of amps (i runs between 1 and num_channels overall)
-        imin = 1 + rank * num_channels / sub_comm_size
+        ! Divide calculation of amps (i runs between 1 and num_channel_funcs overall)
+        imin = 1 + rank * num_channel_funcs / sub_comm_size
         if (rank == sub_comm_size - 1) then
-                imax = num_channels
+                imax = num_channel_funcs
         else
-                imax = (rank + 1) * num_channels / sub_comm_size
+                imax = (rank + 1) * num_channel_funcs / sub_comm_size
         end if
 
         ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
@@ -518,39 +529,36 @@ contains
             end if
 
             do k = 1, num_basis_funcs
-                ! Loop over channel functions (phi)
-                channel_func = .true.
-                do n = 1, num_channels
-                    if (config_a) then
-                        integral_1(n) = integrate_double_Simpson(simpson_n_1, lims_1, &
-                            boundary_val, mu_1, m_1, mass_c, single_coords(2:3, 1, :, :), &
-                            config_a, channel_func)
-                    else
-                        integral_1(n) = integrate_double_Simpson(simpson_n_1, lims_1, &
-                            boundary_val, mu_1, m_1, mass_c, single_coords(2:3, :, 1, :), &
-                            config_a, channel_func)
-                    end if
+                ! Loop over channel functions (phi or theta)
+                ! Take inner product of channel function i in single basis
+                ! with channel function n in mixed basis
+                channel_func_1 = .true.
+                single_func_1 = .true.
+                channel_func_2 = .true.
+                single_func_1 = .false.
+                do n = 1, num_channel_funcs
+                    integral_1(n) = integrate_double_Simpson(simpson_n, lims, boundary_val, &
+                        mu_1, m_1, mass_c, single_coords(2:3, :, :), config_a, channel_func_1, &
+                        single_func_1, channel_func_2, single_func_2)
                 end do
                 ! Loop over basis functions (psi)
-                channel_func = .false.
+                ! Take inner product of basis function m in mixed basis
+                ! with basis function k in single basis
+                channel_func_1 = .false.
+                single_func_1 = .false.
+                channel_func_2 = .false.
+                single_func_1 = .true.
                 do m = 1, num_basis_funcs
-                    if (config_a) then
-                        integral_2(m) = integrate_double_Simpson(simpson_n_1, lims_1, &
-                            boundary_val, mu_1, m_1, mass_c, single_coords(:, 1, :, :), &
-                            config_a, channel_func)
-                    else
-                        integral_2(m) = integrate_double_Simpson(simpson_n_1, lims_1, &
-                            boundary_val, mu_1, m_1, mass_c, single_coords(:, 1, :, :), &
-                            config_a, channel_func)
-                    end if
+                    integral_2(m) = integrate_double_Simpson(simpson_n, lims, boundary_val, &
+                        mu_1, m_1, mass_c, single_coords(:, :, :), config_a, channel_func_1, &
+                        single_func_1, channel_func_2, single_func_2)
             end do
 
-                do n = 1, num_channels
+                do n = 1, num_channel_funcs
                     do m = 1, num_basis_funcs
                         amps(i, k) = amps(i, k) + integral_1(n) * integral_2(m) * old_amps(n, m)
                     end do
                 end do
-                ! print *, "amp(", i, k, ") = ", amps(i, k)
             end do
         end do
 
@@ -558,11 +566,11 @@ contains
         if (rank == 0) then
                 ! Receive from all other ranks
                 do i = 1, sub_comm_size - 1
-                        imin = 1 + i * num_channels / sub_comm_size
+                        imin = 1 + i * num_channel_funcs / sub_comm_size
                         if (i == sub_comm_size - 1) then
-                                imax = num_channels
+                                imax = num_channel_funcs
                         else
-                                imax = (i + 1) * num_channels / sub_comm_size
+                                imax = (i + 1) * num_channel_funcs / sub_comm_size
                         end if
 
                         num_values = (imax - imin + 1) * num_basis_funcs
@@ -584,74 +592,102 @@ contains
 
     ! Placeholder - will read surface amplitudes calculated from inner region
     ! Currently sets all values to 1.
-    function get_old_amps(num_channels, num_basis_funcs) result(amps)
+    function calc_old_amps(num_channel_funcs, num_basis_funcs, simpson_n, single_coords, &
+        boundary_val, mu_1, m_1, mass_c, config_a) result(amps)
 
         implicit none
 
-        integer, intent(in) :: num_channels, num_basis_funcs
+        integer, intent(in) :: num_channel_funcs, num_basis_funcs, simpson_n(2)
+        real, intent(in) :: single_coords(3, simpson_n(1)+1, simpson_n(2)+1), boundary_val, mu_1, &
+            m_1, mass_c
+        logical, intent(in) :: config_a
 
-        real :: amps(num_channels, num_basis_funcs)
-        integer :: i, j
+        real :: amps(num_channel_funcs, num_basis_funcs)
+        integer :: i, k
+        logical :: channel_func_1, single_func_1, channel_func_2, single_func_2
 
-        do i = 1, num_channels
-            do j = 1, num_basis_funcs
-                amps(i, j) = 1.
+        ! Take inner product of channel function i in the mixed basis
+        ! with basis function k in mixed basis
+        channel_func_1 = .true.
+        single_func_1 = .false.
+        channel_func_2 = .false.
+        single_func_1 = .false.
+
+        do i = 1, num_channel_funcs
+            do k = 1, num_basis_funcs
+                ! amps(i, k) = 1.
+                amps(i, k) = integrate_double_Simpson(simpson_n, lims, boundary_val, mu_1, m_1, &
+                    mass_c, single_coords, config_a, channel_func_1, single_func_1, &
+                    channel_func_2, single_func_2)
             end do
         end do
 
-    end function get_old_amps
+    end function calc_old_amps
 
 
     ! Transform surface amplitudes w_ik from mixed to single Jacobi coordinates
-    subroutine transform_all_amps(num_channels, num_basis_funcs, nc1, simpson_n, lims, mu_a, &
+    subroutine transform_all_amps(num_channel_funcs, num_basis_funcs, nc1, simpson_n, lims, mu_a, &
         mu_b,m_a, m_b, mass_c, sub_comm)
 
-        integer, intent(in) :: num_channels, num_basis_funcs, simpson_n(3)
+        integer, intent(in) :: num_channel_funcs, num_basis_funcs, simpson_n(3)
         real, intent(in) :: lims(6), mu_a, mu_b, m_a, m_b, mass_c
 
         ! MPI variables
         integer, intent(in) :: sub_comm
 
-        integer :: i, j, nc1, nc2, simpson_n_a(3), simpson_n_b(3)
-        real :: old_amps(num_channels, num_basis_funcs), new_amps(num_channels, num_basis_funcs), &
-            single_coords_a(3, 1, simpson_n(2)+1, simpson_n(3)+1), &
-            single_coords_b(3, simpson_n(1)+1, 1, simpson_n(3)+1)
+        integer :: i, j, nc1, nc2, simpson_n_a(2), simpson_n_b(2)
+        real :: old_amps(num_channel_funcs, num_basis_funcs), &
+            new_amps(num_channel_funcs, num_basis_funcs), &
+            single_coords_a(3, simpson_n(2)+1, simpson_n(3)+1), &
+            single_coords_b(3, simpson_n(1)+1, simpson_n(3)+1), lims_a(4), lims_b(4), &
+            boundary_val
         logical :: config_a
 
-        old_amps = get_old_amps(num_channels, num_basis_funcs)
-        nc2 = num_channels - nc1
+        nc2 = num_channel_funcs - nc1
 
         ! Initialise transformed amps
-        do i = 1, num_channels
+        do i = 1, num_channel_funcs
             do j = 1, num_basis_funcs
                 new_amps(i, j) = 0.
             end do
         end do
 
-        ! At R_a boundary
+        ! At the R_a boundary
         config_a = .true.
-        simpson_n_a = simpson_n
-        simpson_n_a(1) = 0
+        simpson_n_a(1:2) = simpson_n(2:3)
+        boundary_val = lims(2)
+        lims_a(1:4) = lims(3:6)
 
         ! Calculate single Jacobi coordinates (R_a, r_a, gamma_a) for all mixed coordinates
-        single_coords_a = transform_grid(lims, simpson_n_a, mu_a, m_b, mass_c, config_a)
+        single_coords_a = transform_grid(boundary_val, lims_a, simpson_n_a, mu_a, m_b, mass_c, &
+            config_a)
+
+        ! Calculate amplitudes in mixed Jacobi coordinates at R_a boundary
+        old_amps(:nc1, :) = calc_old_amps(nc1, num_basis_funcs, simpson_n_a, single_coords_a, &
+            boundary_val, mu_a, m_b, mass_c, config_a)
 
         ! Transform surface amplitudes at R_a boundary
-        new_amps(:nc1, :) = transform_amps(old_amps, nc1, num_basis_funcs, simpson_n_a, &
-            lims, mu_a, m_b, mass_c, single_coords_a, config_a, sub_comm)
+        new_amps(:nc1, :) = transform_amps(old_amps(:nc1, :), nc1, num_basis_funcs, simpson_n_a, &
+            lims_a, mu_a, m_b, mass_c, single_coords_a, boundary_val, config_a, sub_comm)
 
-
-        ! At R_b boundary
+        ! At the R_b boundary
         config_a = .false.
-        simpson_n_b = simpson_n
-        simpson_n_b(2) = 0
+        simpson_n_b(1) = simpson_n(1)
+        simpson_n_b(2) = simpson_n(3)
+        boundary_val = lims(4)
+        lims_b(1:2) = lims(1:2)
+        lims_b(3:4) = lims(5:6)
 
-        ! Calculate single Jacobi coordinates (R_b, r_b, gamma_b) for all mixed coordinates
-        single_coords_b = transform_grid(lims, simpson_n_b, mu_b, m_a, mass_c, config_a)
+        ! Calculate single Jacobi coodinates (R_b, r_b, gamma_b) for all mixed coordinates
+        single_coords_b = transform_grid(boundary_val, lims_b, simpson_n_b, mu_b, m_a, mass_c, &
+            config_a)
+
+        old_amps(nc1+1:, :) = calc_old_amps(nc2, num_basis_funcs, simpson_n_b, single_coords_b, &
+            boundary_val, mu_b, m_a, mass_c, config_a)
 
         ! Transform surface amplitudes at R_b boundary
-        new_amps(nc1+1:, :) = transform_amps(old_amps, nc2, num_basis_funcs, simpson_n_b, &
-            lims, mu_b, m_a, mass_c, single_coords_b, config_a, sub_comm)
+        new_amps(nc1+1:, :) = transform_amps(old_amps(nc1+1:, :), nc2, num_basis_funcs, &
+            simpson_n_b, lims_b, mu_b, m_a, mass_c, single_coords_b, boundary_val, config_a, sub_comm)
 
         ! Print transformed amplitudes - save in future
         if (rank == 0) then
