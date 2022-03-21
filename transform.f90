@@ -267,15 +267,18 @@ contains
     end function integrand_func
 
 
-    ! Use Simpson's rule to integrate f(x,y,z) over two variables: y and z
+    ! Use Simpson's rule to integrate f(x, y, z) over two variables: y and z
     ! x is input at a fixed value
-    function integrate_double_Simpson(n, lims, x, mu_1, m_1, mass_c, single_coords, config_a, &
-        channel_func_1, single_func_1, channel_func_2, single_func_2) result(total_integral)
+    ! If config_a, x = R_a, y = R_b and z = gamma_ab
+    ! Else x = R_b, y = R_a and z = gamma_ab
+    function integrate_double_Simpson(n, lims, x, mu_1, mu_2, m_1, m_2, mass_c, single_coords, &
+        config_a, channel_func_1, single_func_1, channel_func_2, single_func_2) &
+        result(total_integral)
 
             implicit none
 
             integer, intent(in) :: n(2)
-            real, intent(in) :: lims(4), x, mu_1, m_1, mass_c, &
+            real, intent(in) :: lims(4), x, mu_1, mu_2, m_1, m_2, mass_c, &
                 single_coords(2, n(1)+1, n(2)+1)
             logical, intent(in) :: config_a, channel_func_1, single_func_1, channel_func_2, &
                 single_func_2
@@ -341,6 +344,9 @@ contains
 
             ! Total integral
             total_integral = width(1) * total_integral / 3.
+
+            ! Scale for correct volume element
+            total_integral = ( (mu_1 * mu_2) / (m_1 * m_2) )**(3./2.) * total_integral
 
     end function integrate_double_Simpson
 
@@ -479,11 +485,11 @@ contains
 
     ! Transform surface amplitudes w_ik from mixed to single Jacobi coordinates
     function transform_amps(old_amps, num_channel_funcs, num_basis_funcs, simpson_n, lims, mu_1, &
-        m_1, mass_c, single_coords, boundary_val, config_a, sub_comm) result(amps)
+        mu_2, m_1, m_2, mass_c, single_coords, boundary_val, config_a, sub_comm) result(amps)
 
         integer, intent(in) :: num_channel_funcs, num_basis_funcs, simpson_n(2)
-        real, intent(in) :: old_amps(num_channel_funcs, num_basis_funcs), lims(4), mu_1, m_1, &
-            mass_c, single_coords(3, simpson_n(1)+1, simpson_n(2)+1), boundary_val
+        real, intent(in) :: old_amps(num_channel_funcs, num_basis_funcs), lims(4), mu_1, mu_2, &
+            m_1, m_2, mass_c, single_coords(3, simpson_n(1)+1, simpson_n(2)+1), boundary_val
         logical, intent(in) :: config_a
 
         ! MPI variables
@@ -538,8 +544,8 @@ contains
                 single_func_1 = .false.
                 do n = 1, num_channel_funcs
                     integral_1(n) = integrate_double_Simpson(simpson_n, lims, boundary_val, &
-                        mu_1, m_1, mass_c, single_coords(2:3, :, :), config_a, channel_func_1, &
-                        single_func_1, channel_func_2, single_func_2)
+                        mu_1, mu_2, m_1, m_2, mass_c, single_coords(2:3, :, :), config_a, &
+                        channel_func_1, single_func_1, channel_func_2, single_func_2)
                 end do
                 ! Loop over basis functions (psi)
                 ! Take inner product of basis function m in mixed basis
@@ -550,8 +556,8 @@ contains
                 single_func_1 = .true.
                 do m = 1, num_basis_funcs
                     integral_2(m) = integrate_double_Simpson(simpson_n, lims, boundary_val, &
-                        mu_1, m_1, mass_c, single_coords(:, :, :), config_a, channel_func_1, &
-                        single_func_1, channel_func_2, single_func_2)
+                        mu_1, mu_2, m_1, m_2, mass_c, single_coords(:, :, :), config_a, &
+                        channel_func_1, single_func_1, channel_func_2, single_func_2)
             end do
 
                 do n = 1, num_channel_funcs
@@ -593,13 +599,13 @@ contains
     ! Placeholder - will read surface amplitudes calculated from inner region
     ! Currently sets all values to 1.
     function calc_old_amps(num_channel_funcs, num_basis_funcs, simpson_n, single_coords, &
-        boundary_val, mu_1, m_1, mass_c, config_a) result(amps)
+        boundary_val, mu_1, mu_2, m_1, m_2, mass_c, config_a) result(amps)
 
         implicit none
 
         integer, intent(in) :: num_channel_funcs, num_basis_funcs, simpson_n(2)
         real, intent(in) :: single_coords(3, simpson_n(1)+1, simpson_n(2)+1), boundary_val, mu_1, &
-            m_1, mass_c
+            mu_2, m_1, m_2, mass_c
         logical, intent(in) :: config_a
 
         real :: amps(num_channel_funcs, num_basis_funcs)
@@ -616,8 +622,8 @@ contains
         do i = 1, num_channel_funcs
             do k = 1, num_basis_funcs
                 ! amps(i, k) = 1.
-                amps(i, k) = integrate_double_Simpson(simpson_n, lims, boundary_val, mu_1, m_1, &
-                    mass_c, single_coords, config_a, channel_func_1, single_func_1, &
+                amps(i, k) = integrate_double_Simpson(simpson_n, lims, boundary_val, mu_1, mu_2, &
+                    m_1, m_2, mass_c, single_coords, config_a, channel_func_1, single_func_1, &
                     channel_func_2, single_func_2)
                 amps(i, k) = amps(i, k) / boundary_val
             end do
@@ -665,11 +671,11 @@ contains
 
         ! Calculate amplitudes in mixed Jacobi coordinates at R_a boundary
         old_amps(:nc1, :) = calc_old_amps(nc1, num_basis_funcs, simpson_n_a, single_coords_a, &
-            boundary_val, mu_a, m_b, mass_c, config_a)
+            boundary_val, mu_a, mu_b, m_b, m_a, mass_c, config_a)
 
         ! Transform surface amplitudes at R_a boundary
         new_amps(:nc1, :) = transform_amps(old_amps(:nc1, :), nc1, num_basis_funcs, simpson_n_a, &
-            lims_a, mu_a, m_b, mass_c, single_coords_a, boundary_val, config_a, sub_comm)
+            lims_a, mu_a, mu_b, m_b, m_a, mass_c, single_coords_a, boundary_val, config_a, sub_comm)
 
         ! At the R_b boundary
         config_a = .false.
@@ -684,11 +690,12 @@ contains
             config_a)
 
         old_amps(nc1+1:, :) = calc_old_amps(nc2, num_basis_funcs, simpson_n_b, single_coords_b, &
-            boundary_val, mu_b, m_a, mass_c, config_a)
+            boundary_val, mu_b, mu_a, m_a, m_b, mass_c, config_a)
 
         ! Transform surface amplitudes at R_b boundary
         new_amps(nc1+1:, :) = transform_amps(old_amps(nc1+1:, :), nc2, num_basis_funcs, &
-            simpson_n_b, lims_b, mu_b, m_a, mass_c, single_coords_b, boundary_val, config_a, sub_comm)
+            simpson_n_b, lims_b, mu_b, mu_a, m_a, m_b, mass_c, single_coords_b, boundary_val, &
+            config_a, sub_comm)
 
         ! Print transformed amplitudes - save in future
         if (rank == 0) then
