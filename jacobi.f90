@@ -491,18 +491,18 @@ contains
                         if (single_jacobi) then
                                 lims(3:4) = get_limits(.true., .false., .false., &
                                         x, 0., mixed_lims, mu_a, m_b, mass_c)
+                                width(2) = abs(lims(4) - lims(3)) / real(n(2))
                         end if
 
                         if (test_coords) then
                                 lims(3:4) = get_test_limits(.true., .false., x, 0.)
+                                width(2) = abs(lims(4) - lims(3)) / real(n(2))
                         end if
 
                         if (save_lims) then
                                 r_lims(1, i+1) = x
                                 r_lims(2:3, i+1) = lims(3:4)
                         end if
-
-                        width(2) = abs(lims(4) - lims(3)) / real(n(2))
 
                         do j = 0, n(2)
 
@@ -538,13 +538,14 @@ contains
                                                 gamma_lims(2, i+1, j+1) = y
                                                 gamma_lims(3:4, i+1, j+1) = lims(5:6)
                                         end if
+
+                                        width(3) = abs(lims(6) - lims(5)) / real(n(3))
                                 end if
 
                                 if (test_coords) then
                                         lims(5:6) = get_test_limits(.false., .true., x, y)
+                                        width(3) = abs(lims(6) - lims(5)) / real(n(3))
                                 end if
-
-                                width(3) = abs(lims(6) - lims(5)) / real(n(3))
 
                                 do k = 0, n(3)
 
