@@ -254,6 +254,8 @@ contains
     end function get_mixed_psi
 
 
+    ! Radial continuum basis orbitals in single Jacobi coordinates
+    ! If config_a, R_1 = R_a, else R_1 = R_b
     function get_single_radial_func(R_1, i, j, config_a) result(radial_func)
 
         implicit none
@@ -273,6 +275,8 @@ contains
     end function get_single_radial_func
 
 
+    ! Radial continuum basis orbitals in mixed Jacobi coordinates
+    ! If config_a, R_1 = R_a, else R_1 = R_b
     function get_mixed_radial_func(R_1, i, j, config_a) result(radial_func)
 
         implicit none
@@ -292,6 +296,7 @@ contains
     end function get_mixed_radial_func
 
 
+    ! Coefficients from basis funcion expansion in single Jacobi coordinates
     function get_single_coeff(i, j, k, config_a) result(coeff)
 
         implicit none
@@ -313,6 +318,7 @@ contains
     end function get_single_coeff
 
 
+    ! Coefficients from basis funcion expansion in mixed Jacobi coordinates
     function get_mixed_coeff(i, j, k, config_a) result(coeff)
 
         implicit none
@@ -874,6 +880,8 @@ contains
 
 
     ! Calculate surface amplitudes at boundary
+    ! Currently calculated through integration, but for appropriate channel functions
+    ! should be calculable directly from radial functions at the boundary and coefficients
     function calc_old_amps(n, nc, nt, simpson_n, lims, trans_coords, boundary_val_1, &
         boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, config_a, mixed_int) result(amps)
 
