@@ -309,7 +309,7 @@ contains
 
         ! Calculate gamma_a from R_a, r_a and gamma_ab
         ! R_b is calculated first, and -100. is returned if it is invalid
-        function calculate_gamma_a(small_r_a, mu_a, R_a, mass_c, gamma_ab, m_b, lims, rand_root, &
+        function calc_gamma_a(small_r_a, mu_a, R_a, mass_c, gamma_ab, m_b, lims, rand_root, &
                 pos_root) result(coord)
 
                 implicit none
@@ -399,7 +399,7 @@ contains
 
                 coord = acos(cos_coord)
 
-        end function calculate_gamma_a
+        end function calc_gamma_a
 
 
         ! Use Simpson's rule to integrate three variables
@@ -875,6 +875,7 @@ contains
 
 
         ! Estimate the minimum and maximum values of r_a, based on known R_a
+        ! or gamma_a, based on known R_a and r_a
         function estimate_jacobi_lims(R_a, mixed_lims, mu_a, m_b, mass_c, estimating_r_a, &
                 estimating_gamma_a, small_r_a) result(single_lims)
 
@@ -926,7 +927,7 @@ contains
                                 else if (estimating_gamma_a) then
 
                                         ! Attempt to calculate gamma from R_a, r_a and gamma_ab
-                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
+                                        temp_gamma = calc_gamma_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(3), m_b, &
                                                 mixed_lims, .true., .true.)
 
@@ -958,7 +959,7 @@ contains
                                 else if (estimating_gamma_a) then
 
                                         ! Attempt to calculate gamma from R_a, r_a and gamma_ab
-                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
+                                        temp_gamma = calc_gamma_a(small_r_a, mu_a, &
                                                 mixed_coords(1), mass_c, mixed_coords(3), m_b, &
                                                 mixed_lims, .true., .true.)
 
@@ -988,7 +989,7 @@ contains
                                         else if (estimating_gamma_a) then
                                                 ! Attempt to calculate gamma from
                                                 ! R_a, r_a and gamma_ab
-                                                temp_gamma = calculate_gamma_a(small_r_a, mu_a, &
+                                                temp_gamma = calc_gamma_a(small_r_a, mu_a, &
                                                         mixed_coords(1), mass_c, mixed_coords(3), &
                                                         m_b, mixed_lims, .true., .true.)
 
@@ -1088,13 +1089,13 @@ contains
                                         lims(2) = lims(1)
 
                                         ! Test gamma_ab minimum for +- roots
-                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                        temp_gamma = calc_gamma_a(small_r_a, mu_a, R_a, &
                                                 mass_c, mixed_lims(5), m_b, mixed_lims, .false., &
                                                 .true.)
                                         if (temp_gamma /= -100.) then
                                                 lims(2) = temp_gamma
                                         end if
-                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                        temp_gamma = calc_gamma_a(small_r_a, mu_a, R_a, &
                                                 mass_c, mixed_lims(5), m_b, mixed_lims, .false., &
                                                 .false.)
                                         if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
@@ -1102,13 +1103,13 @@ contains
                                         end if
 
                                         ! Test gamma_ab maximum for +- roots
-                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                        temp_gamma = calc_gamma_a(small_r_a, mu_a, R_a, &
                                                 mass_c, mixed_lims(6), m_b, mixed_lims, .false., &
                                                 .true.)
                                         if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
                                                 lims(2) = temp_gamma
                                         end if
-                                        temp_gamma = calculate_gamma_a(small_r_a, mu_a, R_a, &
+                                        temp_gamma = calc_gamma_a(small_r_a, mu_a, R_a, &
                                                 mass_c, mixed_lims(6), m_b, mixed_lims, .false., &
                                                 .false.)
                                         if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
