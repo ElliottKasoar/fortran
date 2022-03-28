@@ -659,6 +659,9 @@ contains
                     if (abs(2. * R_1 * cos(mixed_lims(4)) / mass_c) > (mixed_lims(2) / m_1)) then
                         lims(1) = calc_small_r_from_mixed(R_1, abs(m_1 * R_1 * &
                             cos(mixed_lims(4)) / mass_c), mixed_lims(4), mu_1, m_1, mass_c)
+                    else
+                        lims(1) = calc_small_r_from_mixed(R_1, mixed_lims(1), mixed_lims(4), &
+                            mu_1, m_1, mass_c)
                     end if
                 else
                     lims(1) = calc_small_r_from_mixed(R_1, mixed_lims(1), mixed_lims(4), mu_1, &
@@ -1047,6 +1050,9 @@ contains
 
         ! r_a or r_b
         single_coords(1) = calc_small_r_from_mixed(R_1, R_2, gamma_ab, mu_1, m_1, mass_c)
+
+        ! gamma_a or gamma_b
+        single_coords(2) = calc_gamma_from_mixed(R_1, R_2, gamma_ab, mu_1, m_1, mass_c, config_a)
 
     end function transform_mixed_to_single
 
