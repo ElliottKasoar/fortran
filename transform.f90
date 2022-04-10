@@ -474,19 +474,19 @@ contains
 
                 end do
 
-                    ! Total gamma_ab intergral for given R_a and R_b
-                    z_integral = width(2) * z_integral / 3.
+                ! Total gamma_ab intergral for given R_a and R_b
+                z_integral = width(2) * z_integral / 3.
 
-                    ! Use Simpon's rule to add contributions for this subinterval
-                    temp_integral = z_integral
+                ! Use Simpon's rule to add contributions for this subinterval
+                temp_integral = z_integral
 
-                    if (i == 0 .or. i == simpson_n(1)) then
-                        total_integral = total_integral + temp_integral
-                    else if (mod(i, 2) == 0) then
-                        total_integral = total_integral + 2. * temp_integral
-                    else
-                        total_integral = total_integral + 4. * temp_integral
-                    end if
+                if (i == 0 .or. i == simpson_n(1)) then
+                    total_integral = total_integral + temp_integral
+                else if (mod(i, 2) == 0) then
+                    total_integral = total_integral + 2. * temp_integral
+                else
+                    total_integral = total_integral + 4. * temp_integral
+                end if
 
             end do
             ! Total integral
