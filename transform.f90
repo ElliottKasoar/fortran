@@ -440,6 +440,7 @@ contains
 
             ! Get range of y for current x
             width(1) = abs(coords(1, 1, 1) - coords(1, simpson_n(1)+1, 1))
+            width(1) = width(1) / real(simpson_n(1))
 
             ! Integrate each variable in turn, covering full limits
             ! Variables labelled x, y and z for simplicity
@@ -453,8 +454,13 @@ contains
 
                 ! Get range of z for current x and y
                 width(2) = abs(coords(2, i+1, 1) - coords(2, i+1, simpson_n(2)+1))
+                width(2) = width(2) / real(simpson_n(2))
 
                 do j = 0, simpson_n(2)
+
+                    if (width(2) == 0.) then
+                        exit
+                    end if
 
                     ! Set value for z
                     z = coords(2, i+1, j+1)
