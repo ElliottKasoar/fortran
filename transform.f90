@@ -1,12 +1,20 @@
+module precisn
+    implicit none
+    private
+    integer, parameter::   wp = selected_real_kind(12)
+    public wp
+end module precisn
+
 program transform
 
     use mpi
+    use precisn, only: wp
 
     implicit none
 
     integer :: simpson_n(3), i, k, n_1, nc_1, n_2, nc_2, b, nt
-    real :: mixed_lims(6), integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
-        values(10), mixed_int_value
+    real(wp) :: mixed_lims(6), integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, &
+        m_b, values(10), mixed_int_value
     logical :: save_inputs, mixed_int
 
     ! MPI variables
@@ -41,8 +49,8 @@ program transform
     ! (R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max)
     ! At the R_a boundary, R_a = R_a_max and remaining four limits used
     ! At the R_b boundary, R_b = R_b_max and remaining four limits used
-    ! Note: 4.*atan(1.) = pi
-    mixed_lims = (/ 0., 3., 0., 5., 0., 4.*atan(1.) /)
+    ! Note: 4._wp*atan(1._wp) = pi
+    mixed_lims = (/ 0.0_wp, 3._wp, 0.0_wp, 5._wp, 0.0_wp, 4._wp*atan(1._wp) /)
 
     ! Calculate mass relations (three masses defined within)
     call calc_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
@@ -50,9 +58,9 @@ program transform
     if (rank == 0 .and. save_inputs) then
 
         if (mixed_int) then
-            mixed_int_value = 1.
+            mixed_int_value = 1._wp
         else
-            mixed_int_value = 0.
+            mixed_int_value = 0.0_wp
         end if
 
         values = (/ mass_a, mass_b, mass_c, mixed_lims(1), mixed_lims(2), mixed_lims(3), &
@@ -116,26 +124,26 @@ contains
 
         implicit none
 
-        real, intent(inout) :: mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
+        real(wp), intent(inout) :: mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b
 
         ! Atom masses
-        mass_a = 1.
-        mass_b = 1.
-        mass_c = 1.
+        mass_a = 1._wp
+        mass_b = 1._wp
+        mass_c = 1._wp
 
         ! Sum of masses
-        mass_total = 0.
+        mass_total = 0.0_wp
         mass_total = mass_a + mass_b + mass_c
 
         ! Internal reduced masses
-        m_a = 0.
-        m_b = 0.
+        m_a = 0.0_wp
+        m_b = 0.0_wp
         m_a = mass_b * mass_c / (mass_b + mass_c)
         m_b = mass_a * mass_c / (mass_a + mass_c)
 
         ! Reduced channel masses
-        mu_a = 0.
-        mu_b = 0.
+        mu_a = 0.0_wp
+        mu_b = 0.0_wp
         mu_a = mass_a * mass_b * mass_c / (mass_total * m_a)
         mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
@@ -150,16 +158,16 @@ contains
         implicit none
 
         integer, intent(in) :: i
-        real, intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1
+        real(wp), intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1
         logical, intent(in) :: config_a, conj
 
-        real :: R_2, func
+        real(wp) :: R_2, func
 
         ! phi defined for 1 to n_1, theta defined for 1 to n_2 (passed as n_1)
         R_2 = calc_R_from_single(R_1, small_r_1, gamma_1, mu_1, m_1, mass_c, config_a)
 
-        func = real(i) * cos(gamma_1) * (R_2 - boundary_val_2)
-        func = func * exp(-0.5 * R_1 * small_r_1)
+        func = real(i, kind=wp) * cos(gamma_1) * (R_2 - boundary_val_2)**2._wp
+        func = func * exp(-0.5_wp * R_1 * small_r_1)
 
     end function get_single_phi
 
@@ -172,14 +180,14 @@ contains
         implicit none
 
         integer, intent(in) :: i
-        real, intent(in) :: boundary_val_2, R_1, R_2, gamma_ab
+        real(wp), intent(in) :: boundary_val_2, R_1, R_2, gamma_ab
         logical, intent(in) :: config_a, conj
 
-        real :: func
+        real(wp) :: func
 
         ! phi defined for 1 to n_1, theta defined for 1 to n_2 (passed as n_1)
-        func = real(i) * cos(gamma_ab) * (R_2 - boundary_val_2)
-        func = func * exp(-0.5 * R_1 * R_2)
+        func = real(i, kind=wp) * cos(gamma_ab) * (R_2 - boundary_val_2)**2._wp
+        func = func * exp(-0.5_wp * R_1 * R_2)
 
     end function get_mixed_phi
 
@@ -194,10 +202,10 @@ contains
         implicit none
 
         integer, intent(in) :: k, n_1, nc_1
-        real, intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1
+        real(wp), intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1
         logical, intent(in) :: config_a, conj
 
-        real :: func
+        real(wp) :: func
         integer :: i, j
 
         ! psi defined for 1 to n_1*nc_1 or 1 to n_2*nc_2 (passed in as n_1 and nc_2 in either case)
@@ -223,10 +231,10 @@ contains
         implicit none
 
         integer, intent(in) :: k, n_1, nc_1
-        real, intent(in) :: boundary_val_2, R_1, R_2, gamma_ab
+        real(wp), intent(in) :: boundary_val_2, R_1, R_2, gamma_ab
         logical, intent(in) :: config_a, conj
 
-        real :: func
+        real(wp) :: func
         integer :: i, j
 
         ! psi defined for 1 to n_1*nc_1 or 1 to n_2*nc_2 (passed in as n_1 and nc_2 in either case)
@@ -248,15 +256,15 @@ contains
         implicit none
 
         integer, intent(in) :: i, j
-        real, intent(in) :: R_1
+        real(wp), intent(in) :: R_1
         logical, intent(in) :: config_a
 
-        real :: radial_func
+        real(wp) :: radial_func
 
         if (config_a) then
-            radial_func = real(i) * real(j) * exp(-1. * R_1)
+            radial_func = real(i, kind=wp) * real(j, kind=wp) * exp(-1._wp * R_1)
         else
-            radial_func = real(i) * real(j) * exp(-1. * R_1)
+            radial_func = real(i, kind=wp) * real(j, kind=wp) * exp(-1._wp * R_1)
         end if
 
     end function get_single_radial_func
@@ -269,15 +277,15 @@ contains
         implicit none
 
         integer, intent(in) :: i, j
-        real, intent(in) :: R_1
+        real(wp), intent(in) :: R_1
         logical, intent(in) :: config_a
 
-        real :: radial_func
+        real(wp) :: radial_func
 
         if (config_a) then
-            radial_func = real(i) * real(j) * exp(-1. * R_1)
+            radial_func = real(i, kind=wp) * real(j, kind=wp) * exp(-1._wp * R_1)
         else
-            radial_func = real(i) * real(j) * exp(-1. * R_1)
+            radial_func = real(i, kind=wp) * real(j, kind=wp) * exp(-1._wp * R_1)
         end if
 
     end function get_mixed_radial_func
@@ -291,13 +299,13 @@ contains
         integer, intent(in) :: i, j, k
         logical, intent(in) :: config_a
 
-        real :: coeff
+        real(wp) :: coeff
 
         if (config_a) then
-            coeff = real(i) + real(j) + real(k)
+            coeff = real(i, kind=wp) + real(j, kind=wp) + real(k, kind=wp)
             coeff = 1 / coeff
         else
-            coeff = real(i) + real(j) + real(k)
+            coeff = real(i, kind=wp) + real(j, kind=wp) + real(k, kind=wp)
             coeff = 1 / coeff
         end if
 
@@ -313,13 +321,13 @@ contains
         integer, intent(in) :: i, j, k
         logical, intent(in) :: config_a
 
-        real :: coeff
+        real(wp) :: coeff
 
         if (config_a) then
-            coeff = real(i) * real(j) * real(k)**2.
+            coeff = real(i, kind=wp) * real(j, kind=wp) * real(k, kind=wp)**2._wp
             coeff = 1 / coeff
         else
-            coeff = (real(i) * real(j) * real(k))**2.
+            coeff = (real(i, kind=wp) * real(j, kind=wp) * real(k, kind=wp))**2._wp
             coeff = 1 / coeff
         end if
 
@@ -338,15 +346,16 @@ contains
             implicit none
 
             integer, intent(in) :: idx_1, idx_2, n_1, nc_1
-            real, intent(in) :: x, y, z, boundary_val_2, mu_1, m_1, mass_c, trans_coords(2)
+            real(wp), intent(in) :: x, y, z, boundary_val_2, mu_1, m_1, mass_c, trans_coords(2)
             logical, intent(in) :: config_a, mixed_int, channel_func_1, single_func_1, &
                 channel_func_2, single_func_2
 
-            real :: R_1, R_2, gamma_ab, small_r_1, gamma_1, total_integrand, integrand_volume, integrand_1, integrand_2
+            real(wp) :: R_1, R_2, gamma_ab, small_r_1, gamma_1, total_integrand, &
+                integrand_volume, integrand_1, integrand_2
             logical :: conj
 
             ! Volume component to be integrated
-            integrand_volume = y**2. * sin(z)
+            integrand_volume = y**2._wp * sin(z)
 
             if (mixed_int) then
                 ! x, y, z coords are mixed Jacobi
@@ -424,23 +433,23 @@ contains
             implicit none
 
             integer, intent(in) :: simpson_n(2), n_1, nc_1, channel_num, basis_num
-            real, intent(in) :: x, boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, coords(2, &
+            real(wp), intent(in) :: x, boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, coords(2, &
                 simpson_n(1)+1, simpson_n(2)+1), trans_coords(2, simpson_n(1)+1, simpson_n(2)+1)
             logical, intent(in) :: config_a, channel_func_1, single_func_1, channel_func_2, &
                 single_func_2, mixed_int
 
-            real :: width(2), y, z, temp_integral, z_integral, total_integral
+            real(wp) :: width(2), y, z, temp_integral, z_integral, total_integral
             integer :: i, j
             logical :: verbose
 
             verbose = .true.
 
-            total_integral = 0.
-            temp_integral = 0.
+            total_integral = 0.0_wp
+            temp_integral = 0.0_wp
 
             ! Get range of y for current x
             width(1) = abs(coords(1, 1, 1) - coords(1, simpson_n(1)+1, 1))
-            width(1) = width(1) / real(simpson_n(1))
+            width(1) = width(1) / real(simpson_n(1), kind=wp)
 
             ! Integrate each variable in turn, covering full limits
             ! Variables labelled x, y and z for simplicity
@@ -450,15 +459,15 @@ contains
                 y = coords(1, i+1, 1)
 
                 ! Total z integral given x and y
-                z_integral = 0.
+                z_integral = 0.0_wp
 
                 ! Get range of z for current x and y
                 width(2) = abs(coords(2, i+1, 1) - coords(2, i+1, simpson_n(2)+1))
-                width(2) = width(2) / real(simpson_n(2))
+                width(2) = width(2) / real(simpson_n(2), kind=wp)
 
                 do j = 0, simpson_n(2)
 
-                    if (width(2) == 0.) then
+                    if (width(2) == 0.0_wp) then
                         exit
                     end if
 
@@ -473,15 +482,15 @@ contains
                     if (j == 0 .or. j == simpson_n(2)) then
                         z_integral = z_integral + temp_integral
                     else if (mod(j, 2) == 0) then
-                        z_integral = z_integral + 2. * temp_integral
+                        z_integral = z_integral + 2._wp * temp_integral
                     else
-                        z_integral = z_integral + 4. * temp_integral
+                        z_integral = z_integral + 4._wp * temp_integral
                     end if
 
                 end do
 
-                ! Total gamma_ab intergral for given R_a and R_b
-                z_integral = width(2) * z_integral / 3.
+                ! Total z intergral for given x and y
+                z_integral = width(2) * z_integral / 3._wp
 
                 ! Use Simpon's rule to add contributions for this subinterval
                 temp_integral = z_integral
@@ -489,18 +498,18 @@ contains
                 if (i == 0 .or. i == simpson_n(1)) then
                     total_integral = total_integral + temp_integral
                 else if (mod(i, 2) == 0) then
-                    total_integral = total_integral + 2. * temp_integral
+                    total_integral = total_integral + 2._wp * temp_integral
                 else
-                    total_integral = total_integral + 4. * temp_integral
+                    total_integral = total_integral + 4._wp * temp_integral
                 end if
 
             end do
             ! Total integral
-            total_integral = width(1) * total_integral / 3.
+            total_integral = width(1) * total_integral / 3._wp
 
             ! Scale for correct volume element in mixed basis
             if (mixed_int) then
-                total_integral = ( (mu_1 * mu_2) / (m_1 * m_2) )**(3./2.) * total_integral
+                total_integral = ( (mu_1 * mu_2) / (m_1 * m_2) )**(3._wp/2._wp) * total_integral
             end if
 
     end function integrate_double_Simpson
@@ -513,10 +522,10 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, mixed_lims(4), mu_1, m_1, mass_c, small_r_1
+        real(wp), intent(in) :: R_1, mixed_lims(4), mu_1, m_1, mass_c, small_r_1
         logical, intent(in) :: estimating_r_1, estimating_gamma_1, config_a
 
-        real :: test_coord(100000), mixed_coords(2), width(2), single_lims(2), test_r_a, &
+        real(wp) :: test_coord(100000), mixed_coords(2), width(2), single_lims(2), test_r_a, &
             temp_gamma
         integer :: i, j, n, count
         logical :: random_range
@@ -527,7 +536,7 @@ contains
         if (random_range) then
             n = size(test_coord)
         else
-            n = sqrt(real(size(test_coord)))
+            n = sqrt(real(size(test_coord), kind=wp))
         end if
 
         ! Ranges of R_2 and gamma_ab
@@ -558,7 +567,7 @@ contains
                         mixed_coords(2), mu_1, m_1, mass_c, .true., .true., config_a)
 
                     ! If R_b is invalid, ignore gamma calculated
-                    if (temp_gamma /= -100.) then
+                    if (temp_gamma /= -100.0_wp) then
                         count = count + 1
                         test_coord(count) = temp_gamma
                     end if
@@ -590,7 +599,7 @@ contains
                         mixed_coords(2), mu_1, m_1, mass_c, .true., .true., config_a)
 
                     ! If R_2 is invalid, ignore gamma calculated
-                    if (temp_gamma /= -100.) then
+                    if (temp_gamma /= -100.0_wp) then
                         count = count + 1
                         test_coord(count) = temp_gamma
                     end if
@@ -600,11 +609,13 @@ contains
             do i = 1, n
 
                 ! Evenly sample entire range of each coord
-                mixed_coords(1) = mixed_lims(1) + (real(i-1) * width(1) / real(n))
+                mixed_coords(1) = mixed_lims(1) + (real(i-1, kind=wp) * &
+                    width(1) / real(n, kind=wp))
 
                 do j = 1, n
                     ! Evenly sample entire range of each coord
-                    mixed_coords(2) = mixed_lims(3) + (real(j-1) * width(2) / real(n))
+                    mixed_coords(2) = mixed_lims(3) + (real(j-1, kind=wp) * width(2) / &
+                        real(n, kind=wp))
 
                     if (estimating_r_1) then
                         ! Calculate r_1 from R_1, R_2 and gamma_ab
@@ -617,7 +628,7 @@ contains
                             mixed_coords(2), mu_1, m_1, mass_c, .true., .true., config_a)
 
                         ! If R_2 is invalid, ignore gamma_1 calculated
-                        if (temp_gamma /= -100.) then
+                        if (temp_gamma /= -100.0_wp) then
                             count = count + 1
                             test_coord(count) = temp_gamma
                         end if
@@ -630,8 +641,8 @@ contains
             single_lims(1) = minval(test_coord(1:count))
             single_lims(2) = maxval(test_coord(1:count))
         else
-            single_lims(1) = 0.
-            single_lims(2) = 0.
+            single_lims(1) = 0.0_wp
+            single_lims(2) = 0.0_wp
         end if
 
     end function estimate_jacobi_lims
@@ -642,27 +653,28 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, small_r_1, mixed_lims(4), mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, small_r_1, mixed_lims(4), mu_1, m_1, mass_c
         logical, intent(in) :: get_r_lims, get_gamma_lims, estimate_lims, config_a
 
-        real :: lims(2), gamma_tol, temp_gamma
+        real(wp) :: lims(2), gamma_tol, temp_gamma
 
         if (get_r_lims .and. get_gamma_lims) then
             print *, "Only one coordinate flag should be set to true"
             stop
         end if
 
-        gamma_tol = 0.001
+        gamma_tol = 0.0000001_wp
 
         if (get_r_lims) then
             if (estimate_lims) then
-                lims(1:2) = estimate_jacobi_lims(mixed_lims, R_1, 0., mu_1, m_1, mass_c, .true., &
-                    .false., config_a)
+                lims(1:2) = estimate_jacobi_lims(mixed_lims, R_1, 0.0_wp, mu_1, m_1, mass_c, &
+                    .true., .false., config_a)
             else
                 ! If gamma_ab can be greater than pi/2, cos(gamma_ab) < 0 is possible
-                if (mixed_lims(4) >= 2.*atan(1.)) then
+                if (mixed_lims(4) >= 2._wp*atan(1._wp)) then
                     ! Check negative value large enough to offset, R_2^2, otherwise set R_2 = 0
-                    if (abs(2. * R_1 * cos(mixed_lims(4)) / mass_c) > (mixed_lims(2) / m_1)) then
+                    if (abs(2._wp * R_1 * cos(mixed_lims(4)) / mass_c) > &
+                    (mixed_lims(2) / m_1)) then
                         lims(1) = calc_small_r_from_mixed(R_1, abs(m_1 * R_1 * &
                             cos(mixed_lims(4)) / mass_c), mixed_lims(4), mu_1, m_1, mass_c)
                     else
@@ -690,25 +702,26 @@ contains
                 ! Use with caution
 
                 ! gamma_a is undefined for R_1 = 0 or r_1 = 0
-                if (R_1 == 0. .or. small_r_1 == 0.) then
-                    lims(1) = 0.
-                    lims(2) = 0.
+                if (R_1 == 0.0_wp .or. small_r_1 == 0.0_wp) then
+                    lims(1) = 0.0_wp
+                    lims(2) = 0.0_wp
                 else
                     ! Calculate cos(gamma_1) when R_2 is maximum
                     ! to get the minimum gamma_1
-                    lims(1) = mass_c * mu_1 * ((mixed_lims(4) / m_1 )**2. - (R_1 / mass_c)**2. &
-                        - (small_r_1 / mu_1)**2.) / (2. * R_1 * small_r_1)
+                    lims(1) = mass_c * mu_1 * ((mixed_lims(4) / m_1 )**2._wp - &
+                        (R_1 / mass_c)**2._wp - (small_r_1 / mu_1)**2._wp) &
+                        / (2._wp * R_1 * small_r_1)
 
                     ! There may be no valid cos(gamma_a) for maximum R_b
                     ! In this case, gamma_a spans full range
-                    if (lims(1) > 1.) then
-                        lims(1) = 0.
-                    else if (lims(1) < -1.) then
+                    if (lims(1) > 1._wp) then
+                        lims(1) = 0.0_wp
+                    else if (lims(1) < -1._wp) then
                         ! Allow for rounding errors near pi
-                        if (lims(1) > -(1.+gamma_tol)) then
-                            lims(1) = acos(-1.)
+                        if (lims(1) > -(1._wp+gamma_tol)) then
+                            lims(1) = acos(-1._wp)
                         else
-                            lims(1) = 0.
+                            lims(1) = 0.0_wp
                         end if
                     else
                         lims(1) = acos(lims(1))
@@ -720,24 +733,24 @@ contains
                     ! Test gamma_ab minimum for +- roots
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                         mixed_lims(3), mu_1, m_1, mass_c, .false., .true., config_a)
-                    if (temp_gamma /= -100.) then
+                    if (temp_gamma /= -100.0_wp) then
                         lims(2) = temp_gamma
                     end if
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                         mixed_lims(3), mu_1, m_1, mass_c, .false., .false., config_a)
-                    if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
+                    if (temp_gamma /= -100.0_wp .and. temp_gamma > lims(2)) then
                         lims(2) = temp_gamma
                     end if
 
                     ! Test gamma_ab maximum for +- roots
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                         mixed_lims(4), mu_1, m_1, mass_c, .false., .true., config_a)
-                    if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
+                    if (temp_gamma /= -100.0_wp .and. temp_gamma > lims(2)) then
                             lims(2) = temp_gamma
                     end if
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                             mixed_lims(4), mu_1, m_1, mass_c, .false., .false., config_a)
-                    if (temp_gamma /= -100. .and. temp_gamma > lims(2)) then
+                    if (temp_gamma /= -100.0_wp .and. temp_gamma > lims(2)) then
                             lims(2) = temp_gamma
                     end if
                 end if
@@ -754,11 +767,11 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, R_2, gamma_ab, mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, R_2, gamma_ab, mu_1, m_1, mass_c
 
-        real :: r
+        real(wp) :: r
 
-        r = (R_1 / mass_c)**2.  + (R_2 / m_1)**2. + 2. * &
+        r = (R_1 / mass_c)**2._wp  + (R_2 / m_1)**2._wp + 2._wp * &
             (R_1 * R_2 * cos(gamma_ab) / (mass_c * m_1))
 
         ! Set r to 0 for invalid coordinates, but should not occur
@@ -766,7 +779,7 @@ contains
             r = mu_1 * sqrt(r)
         else
             print *, "Warning: invalid r: ", r
-            r = 0.
+            r = 0.0_wp
         end if
 
     end function calc_small_r_from_mixed
@@ -782,22 +795,22 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
         logical, intent(in) :: config_a
 
-        real :: R_2
+        real(wp) :: R_2
 
-        R_2 = (R_1 / mass_c)**2. + (small_r_1 / mu_1)**2.
+        R_2 = (R_1 / mass_c)**2._wp + (small_r_1 / mu_1)**2._wp
 
         if (config_a) then
-            R_2 = R_2 + (2. * R_1 * small_r_1 * cos(gamma_1) / (mu_1 * mass_c))
+            R_2 = R_2 + (2._wp * R_1 * small_r_1 * cos(gamma_1) / (mu_1 * mass_c))
         else
-            R_2 = R_2 - (2. * R_1 * small_r_1 * cos(gamma_1) / (mu_1 * mass_c))
+            R_2 = R_2 - (2._wp * R_1 * small_r_1 * cos(gamma_1) / (mu_1 * mass_c))
         end if
 
         ! Catch numerical errors
-        if (R_2 < 0.) then
-            R_2 = 0.
+        if (R_2 < 0.0_wp) then
+            R_2 = 0.0_wp
         else
             R_2 = m_1 * sqrt(R_2)
         end if
@@ -812,24 +825,24 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, R_2, gamma_ab, mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, R_2, gamma_ab, mu_1, m_1, mass_c
         logical, intent(in) :: config_a
 
-        real :: r, gamma_1, cos_numerator, gamma_tol
+        real(wp) :: r, gamma_1, cos_numerator, gamma_tol
 
-        gamma_tol = 0.001
+        gamma_tol = 0.0000001_wp
 
         ! Angle undefined for R_1 = 0
-        if (R_1 == 0.) then
-            gamma_1 = 0.
+        if (R_1 == 0.0_wp) then
+            gamma_1 = 0.0_wp
             return
         end if
 
         r = calc_small_r_from_mixed(R_1, R_2, gamma_ab, mu_1, m_1, mass_c)
 
         ! Angle undefined for r = 0
-        if (r == 0.) then
-            gamma_1 = 0.
+        if (r == 0.0_wp) then
+            gamma_1 = 0.0_wp
             return
         end if
 
@@ -843,21 +856,21 @@ contains
         gamma_1 = cos_numerator / r
 
         ! Prevent NaN when taking acos - there is probably a better solution!
-        if (gamma_1 > 1.) then
-            if (gamma_1 <= (1.+gamma_tol)) then
-                gamma_1 = 1.
+        if (gamma_1 > 1._wp) then
+            if (gamma_1 <= (1._wp+gamma_tol)) then
+                gamma_1 = 1._wp
             else
                 print *, "Warning: invalid gamma_1: ", gamma_1
-                gamma_1 = 1.
+                gamma_1 = 1._wp
                 stop
             end if
         end if
-        if (gamma_1 < -1.) then
-            if (gamma_1 >= -(1.+gamma_tol)) then
-                gamma_1 = -1.
+        if (gamma_1 < -1._wp) then
+            if (gamma_1 >= -(1._wp+gamma_tol)) then
+                gamma_1 = -1._wp
             else
                 print *, "Warning: invalid gamma_1: ", gamma_1
-                gamma_1 = -1.
+                gamma_1 = -1._wp
                 stop
             end if
         end if
@@ -874,29 +887,29 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
         logical, intent(in) :: config_a
 
-        real :: gamma_ab, gamma_tol, R_2
+        real(wp) :: gamma_ab, gamma_tol, R_2
 
         ! Angle undefined for R_1 = 0
-        if (R_1 == 0.) then
-            gamma_ab = 0.
+        if (R_1 == 0.0_wp) then
+            gamma_ab = 0.0_wp
             return
         end if
 
-        gamma_tol = 0.001
+        gamma_tol = 0.0000001_wp
 
         R_2 = calc_R_from_single(R_1, small_r_1, gamma_1, mu_1, m_1, mass_c, config_a)
 
         ! Angle undefined for R_2 = 0
-        if (R_2 == 0.) then
-            gamma_ab = 0.
+        if (R_2 == 0.0_wp) then
+            gamma_ab = 0.0_wp
             return
         end if
 
         if (config_a) then
-            gamma_ab = (-1. * small_r_1 * cos(gamma_1) / mu_1) - (R_1 / mass_c )
+            gamma_ab = (-1._wp * small_r_1 * cos(gamma_1) / mu_1) - (R_1 / mass_c )
         else
             gamma_ab = (small_r_1 * cos(gamma_1) / mu_1) - (R_1 / mass_c )
         end if
@@ -904,21 +917,21 @@ contains
         gamma_ab = (m_1 / R_2) * gamma_ab
 
         ! Prevent NaN when taking acos - there is probably a better solution!
-        if (gamma_ab > 1.) then
-            if (gamma_ab <= (1.+gamma_tol)) then
-                gamma_ab = 1.
+        if (gamma_ab > 1._wp) then
+            if (gamma_ab <= (1._wp+gamma_tol)) then
+                gamma_ab = 1._wp
             else
                 print *, "Warning: invalid gamma_ab: ", gamma_ab
-                gamma_ab = 1.
+                gamma_ab = 1._wp
                 stop
             end if
         end if
-        if (gamma_ab < -1.) then
-            if (gamma_ab >= -(1.+gamma_tol)) then
-                gamma_ab = -1.
+        if (gamma_ab < -1._wp) then
+            if (gamma_ab >= -(1._wp+gamma_tol)) then
+                gamma_ab = -1._wp
             else
                 print *, "Warning: invalid gamma_ab: ", gamma_ab
-                gamma_ab = -1.
+                gamma_ab = -1._wp
                 stop
             end if
         end if
@@ -931,25 +944,25 @@ contains
 
     ! Calculate gamma_a from R_1 = R_a, r_1 = r_a and gamma_ab
     ! or gamma_b from R_1 = R_b, r_1 = r_b and gamma_ab
-    ! R_2 is calculated first, and -100. is returned if it is invalid
+    ! R_2 is calculated first, and -100.0_wp is returned if it is invalid
     function calc_gamma_from_integral(lims, R_1, small_r_1, gamma_ab, mu_1, m_1, mass_c, &
         rand_root, pos_root, config_a) result(gamma_1)
 
         implicit none
 
-        real, intent(in) :: lims(4), R_1, small_r_1, gamma_ab, mu_1, m_1, mass_c
+        real(wp), intent(in) :: lims(4), R_1, small_r_1, gamma_ab, mu_1, m_1, mass_c
         logical, intent(in) :: rand_root, pos_root, config_a
 
         logical :: positive_root
-        real :: cos_numerator, cos_denominator, gamma_1, temp_R_2_1, temp_R_2_2, R_2_over_m_1, &
-            rand_num, R_2_tol, gamma_tol
+        real(wp) :: cos_numerator, cos_denominator, gamma_1, temp_R_2_1, temp_R_2_2, &
+            R_2_over_m_1, rand_num, R_2_tol, gamma_tol
 
-        R_2_tol = 0.0001
-        gamma_tol = 0.001
+        R_2_tol = 0.0000001_wp
+        gamma_tol = 0.0000001_wp
 
         if (rand_root) then
             call random_number(rand_num)
-            if (rand_num > 0.5) then
+            if (rand_num > 0.5_wp) then
                 positive_root = .true.
             else
                 positive_root = .true.
@@ -961,18 +974,18 @@ contains
         cos_denominator = small_r_1
 
         ! gamma_1 is undefined if either R_1 = 0 or r_1 = 0
-        if (cos_denominator == 0. .or. R_1 == 0.) then
-            gamma_1 = 0.
+        if (cos_denominator == 0.0_wp .or. R_1 == 0.0_wp) then
+            gamma_1 = 0.0_wp
             return
         end if
 
         ! Calculate R_2 / m_1
-        temp_R_2_1 = (cos_denominator / mu_1)**2. + (R_1 / mass_c)**2. * &
-            (cos(gamma_ab)**2. - 1.)
+        temp_R_2_1 = (cos_denominator / mu_1)**2._wp + (R_1 / mass_c)**2._wp * &
+            (cos(gamma_ab)**2._wp - 1._wp)
 
         ! Must be positive as will be square rooted
-        if (temp_R_2_1 < 0.) then
-            gamma_1 = -100.
+        if (temp_R_2_1 < 0.0_wp) then
+            gamma_1 = -100.0_wp
             return
         else
             temp_R_2_2 = - (R_1 / mass_c) * cos(gamma_ab)
@@ -1002,7 +1015,7 @@ contains
                 .and. R_2_over_m_1 > - R_2_tol + lims(1) / m_1) then
                     R_2_over_m_1 = lims(1) / m_1
                 else
-                    gamma_1 = -100.
+                    gamma_1 = -100.0_wp
                     return
                 end if
             end if
@@ -1017,21 +1030,21 @@ contains
         gamma_1 = cos_numerator / cos_denominator
 
         ! Prevent NaN when taking acos - there is probably a better solution!
-        if (gamma_1 > 1.) then
-            if (gamma_1 <= (1.+gamma_tol)) then
-                gamma_1 = 1.
+        if (gamma_1 > 1._wp) then
+            if (gamma_1 <= (1._wp+gamma_tol)) then
+                gamma_1 = 1._wp
             else
                 print *, "Warning: invalid gamma_1: ", gamma_1
-                gamma_1 = 1.
+                gamma_1 = 1._wp
                 stop
             end if
         end if
-        if (gamma_1 < -1.) then
-            if (gamma_1 >= -(1.+gamma_tol)) then
-                gamma_1 = -1.
+        if (gamma_1 < -1._wp) then
+            if (gamma_1 >= -(1._wp+gamma_tol)) then
+                gamma_1 = -1._wp
             else
                 print *, "Warning: invalid gamma_1: ", gamma_1
-                gamma_1 = -1.
+                gamma_1 = -1._wp
                 stop
             end if
         end if
@@ -1049,10 +1062,10 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, R_2, gamma_ab, mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, R_2, gamma_ab, mu_1, m_1, mass_c
         logical, intent(in) :: config_a
 
-        real :: single_coords(2)
+        real(wp) :: single_coords(2)
 
         ! r_a or r_b
         single_coords(1) = calc_small_r_from_mixed(R_1, R_2, gamma_ab, mu_1, m_1, mass_c)
@@ -1071,10 +1084,10 @@ contains
 
         implicit none
 
-        real, intent(in) :: R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
+        real(wp), intent(in) :: R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
         logical, intent(in) :: config_a
 
-        real :: mixed_coords(2)
+        real(wp) :: mixed_coords(2)
 
         ! R_b or R_a
         mixed_coords(1) = calc_R_from_single(R_1, small_r_1, gamma_1, mu_1, m_1, mass_c, config_a)
@@ -1100,11 +1113,11 @@ contains
         implicit none
 
         integer, intent(in) :: n(2)
-        real, intent(in) :: x, coords(2, n(1)+1, n(2)+1), mu_1, m_1, mass_c
+        real(wp), intent(in) :: x, coords(2, n(1)+1, n(2)+1), mu_1, m_1, mass_c
         logical, intent(in) :: config_a, mixed_int
 
         integer :: i, j, k
-        real :: y, z, trans_coords(2, n(1)+1, n(2)+1)
+        real(wp) :: y, z, trans_coords(2, n(1)+1, n(2)+1)
 
         ! Loop over R_b (config_a) or R_a (not config_a) values
         do i = 0, n(1)
@@ -1130,33 +1143,33 @@ contains
         implicit none
 
         integer, intent(in) :: n(2)
-        real, intent(in) :: x, boundary_val_2, mixed_lims(4), mu_1, m_1, mass_c
+        real(wp), intent(in) :: x, boundary_val_2, mixed_lims(4), mu_1, m_1, mass_c
         logical, intent(in) :: config_a, mixed_int
 
         integer :: i, j, k
-        real :: y, z, width(2), coords(2, n(1)+1, n(2)+1), lims(4)
+        real(wp) :: y, z, width(2), coords(2, n(1)+1, n(2)+1), lims(4)
 
         if (mixed_int) then
             ! R_b or R_a, and gamma_ab limits already defined
             lims = mixed_lims
-            width(1) = abs(lims(2) - lims(1)) / real(n(1))
-            width(2) = abs(lims(4) - lims(3)) / real(n(2))
+            width(1) = abs(lims(2) - lims(1)) / real(n(1), kind=wp)
+            width(2) = abs(lims(4) - lims(3)) / real(n(2), kind=wp)
         else
             ! Calculate r_a or r_b limits
-            ! lims(1:2) = get_jacobi_lims(mixed_lims, x, 0., mu_1, m_1, mass_c, .true., .false., &
+            ! lims(1:2) = get_jacobi_lims(mixed_lims, x, 0.0_wp, mu_1, m_1, mass_c, .true., .false., &
             !     .true., config_a)
             ! print *, "Estimate", lims(1:2)
 
-            lims(1:2) = get_jacobi_lims(mixed_lims, x, 0., mu_1, m_1, mass_c, .true., .false., &
+            lims(1:2) = get_jacobi_lims(mixed_lims, x, 0.0_wp, mu_1, m_1, mass_c, .true., .false., &
                 .false., config_a)
             ! print *, "Analytical", lims(1:2)
 
-            width(1) = abs(lims(2) - lims(1)) / real(n(1))
+            width(1) = abs(lims(2) - lims(1)) / real(n(1), kind=wp)
         end if
 
         ! Loop over R_b or R_a values
         do i = 0, n(1)
-            y = lims(1) + real(i) * width(1)
+            y = lims(1) + real(i, kind=wp) * width(1)
 
             if (.not. mixed_int) then
                 ! Calculate gamma_a or gamma_b limits
@@ -1167,11 +1180,11 @@ contains
                 ! lims(3:4) = get_jacobi_lims(mixed_lims, x, y, mu_1, m_1, mass_c, .false., .true., &
                 !     .false., config_a)
                 ! print *, "Analytical", lims(3:4)
-                width(2) = abs(lims(4) - lims(3)) / real(n(2))
+                width(2) = abs(lims(4) - lims(3)) / real(n(2), kind=wp)
             end if
 
             do j = 0, n(2)
-                z = lims(3) + real(j) * width(2)
+                z = lims(3) + real(j, kind=wp) * width(2)
                 coords(:, i+1, j+1) = (/ y, z /)
             end do
         end do
@@ -1185,7 +1198,7 @@ contains
         sub_comm) result(amps)
 
         integer, intent(in) :: n_1, nc_1, nt, simpson_n(2)
-        real, intent(in) :: old_amps(n_1, nt), boundary_val_1, boundary_val_2, mu_1, &
+        real(wp), intent(in) :: old_amps(n_1, nt), boundary_val_1, boundary_val_2, mu_1, &
             mu_2, m_1, m_2, mass_c, coords(2, simpson_n(1)+1, simpson_n(2)+1), &
             trans_coords(2, simpson_n(1)+1, simpson_n(2)+1)
         logical, intent(in) :: config_a, mixed_int
@@ -1194,7 +1207,7 @@ contains
         integer, intent(in) :: sub_comm
 
         integer :: i, k, n, m, imin, imax, progress, num_values
-        real :: integral_1(n_1), integral_2(nt), amps(n_1, nt)
+        real(wp) :: integral_1(n_1), integral_2(nt), amps(n_1, nt)
         logical :: verbose, channel_func_1, single_func_1, channel_func_2, single_func_2
 
         ! MPI variables
@@ -1207,7 +1220,7 @@ contains
         ! Initialise amps array
         do i = 1, n_1
             do k = 1, nt
-                amps(i, k) = 0.
+                amps(i, k) = 0.0_wp
             end do
         end do
 
@@ -1305,12 +1318,12 @@ contains
         implicit none
 
         integer, intent(in) :: n, nc, nt, simpson_n(2)
-        real, intent(in) :: coords(2, simpson_n(1)+1, simpson_n(2)+1), &
+        real(wp), intent(in) :: coords(2, simpson_n(1)+1, simpson_n(2)+1), &
             trans_coords(2, simpson_n(1)+1, simpson_n(2)+1), boundary_val_1, boundary_val_2, &
             mu_1, mu_2, m_1, m_2, mass_c
         logical, intent(in) :: config_a, mixed_int
 
-        real :: amps(n, nt)
+        real(wp) :: amps(n, nt)
         integer :: i, k
         logical :: channel_func_1, single_func_1, channel_func_2, single_func_2
 
@@ -1338,14 +1351,14 @@ contains
         m_a, m_b, mass_c, mixed_int, sub_comm)
 
         integer, intent(in) :: n_1, nc_1, n_2, nc_2, nt, simpson_n(3)
-        real, intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
+        real(wp), intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
         logical, intent(in) :: mixed_int
 
         ! MPI variables
         integer, intent(in) :: sub_comm
 
         integer :: i, j, simpson_n_1(2)
-        real :: old_amps(n_1 + n_2, nt), new_amps(n_1 + n_2, nt), &
+        real(wp) :: old_amps(n_1 + n_2, nt), new_amps(n_1 + n_2, nt), &
             coords_a(2, simpson_n(2)+1, simpson_n(3)+1), &
             trans_coords_a(2, simpson_n(2)+1, simpson_n(3)+1), &
             coords_b(2, simpson_n(1)+1, simpson_n(3)+1), &
@@ -1360,14 +1373,14 @@ contains
         ! Initialise old amps
         do i = 1, n_1 + n_2
             do j = 1, nt
-                old_amps(i, j) = 0.
+                old_amps(i, j) = 0.0_wp
             end do
         end do
 
         ! Initialise transformed amps
         do i = 1, n_1 + n_2
             do j = 1, nt
-                new_amps(i, j) = 0.
+                new_amps(i, j) = 0.0_wp
             end do
         end do
 
