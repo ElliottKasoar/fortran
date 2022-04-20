@@ -1216,7 +1216,7 @@ contains
         logical :: verbose, channel_func_1, single_func_1, channel_func_2, single_func_2
 
         ! MPI variables
-        integer :: ierr, request, recv_status(MPI_STATUS_SIZE)
+        integer :: ierr
 
         verbose = .true.
 
