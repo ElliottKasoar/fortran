@@ -1119,8 +1119,8 @@ contains
     ! Grid defined by limits [R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max]
     ! and number of points in each coordinate [n_R_a, n_R_b, n_gamma_ab]
     ! or equivalent for each set of single Jacobi coordinates
-    function transform_grid(x, coords, n, mu_1, m_1, mass_c, config_a, mixed_int) &
-        result(trans_coords)
+    function transform_grid(x, coords, n, mu_1, m_1, mass_c, config_a, mixed_int, sub_comm, &
+        sub_comm_size, rank) result(trans_coords)
 
         implicit none
 
@@ -1128,11 +1128,48 @@ contains
         real(wp), intent(in) :: x, coords(2, n(1)+1, n(2)+1), mu_1, m_1, mass_c
         logical, intent(in) :: config_a, mixed_int
 
-        integer :: i, j, k
-        real(wp) :: y, z, trans_coords(2, n(1)+1, n(2)+1)
+        ! MPI variables
+        integer, intent(in) :: sub_comm, sub_comm_size, rank
 
-        ! Loop over R_b (config_a) or R_a (not config_a) values
-        do i = 0, n(1)
+        integer :: i, j, imin, imax, progress, num_values
+        real(wp) :: y, z, trans_coords(2, n(1)+1, n(2)+1)
+        logical :: verbose
+
+        ! MPI variables
+        integer :: ierr, recv_status(MPI_STATUS_SIZE)
+
+        ! verbose = .true.
+        verbose = .false.
+
+        ! Initialise coords array
+        do i = 1, n(1)+1
+            do j = 1, n(2)+1
+                trans_coords(:, i, j) = (/ 0._wp, 0._wp /)
+            end do
+        end do
+
+        ! Divide transformation of coordinates (i runs between 1 and n(1) overall)
+        imin = rank * n(1) / sub_comm_size
+        if (rank == sub_comm_size - 1) then
+            imax = n(1)
+        else
+            imax = -1 + (rank + 1) * n(1) / sub_comm_size
+        end if
+
+        ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
+
+        ! Loop over y values
+        do i = imin, imax
+
+            ! print progress every ~20% for each process
+            if ((imax - imin >= 4) .and. verbose) then
+                progress = 100 * (i - imin) / (imax - imin)
+                if (mod((i - imin), (imax - imin + 1) / 5) == 0 &
+                .or. i == imax) then
+                    print *, "On rank", rank, "...Progress... ", progress, "%"
+                end if
+            end if
+
             y = coords(1, i+1, 1)
             do j = 0, n(2)
                 z = coords(2, i+1, j+1)
@@ -1146,11 +1183,39 @@ contains
             end do
         end do
 
+        ! Send all coords to rank 0
+        if (rank == 0) then
+            ! Receive from all other ranks
+            do i = 1, sub_comm_size - 1
+                    imin = i * n(1) / sub_comm_size
+                    if (i == sub_comm_size - 1) then
+                            imax = n(1)
+                    else
+                            imax = -1 + (i + 1) * n(1) / sub_comm_size
+                    end if
+
+                    num_values = (imax - imin + 1) * 2 * (n(2)+1)
+                    call MPI_Recv(trans_coords(:, imin+1:imax+1, :), num_values, &
+                            MPI_DOUBLE_PRECISION, i, 0, sub_comm, recv_status, ierr)
+            end do
+        else
+            ! All non-zero ranks send to rank 0
+            num_values = (imax - imin + 1) * 2 * (n(2)+1)
+            call MPI_Ssend(trans_coords(:, imin+1:imax+1, :), num_values, MPI_DOUBLE_PRECISION, &
+                0, 0, sub_comm, ierr)
+        end if
+
+        ! All sends/receives complete
+        call MPI_Barrier(sub_comm, ierr)
+        ! Broadcast so all processes have coords - replace recv, send and bcast with gatherv in future
+        call MPI_Bcast(coords, 2*(n(1)+1)*(n(2)+1), MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
+        call MPI_Barrier(sub_comm, ierr)
+
     end function transform_grid
 
 
-    function get_grid(x, boundary_val_2, n, mixed_lims, mu_1, m_1, mass_c, config_a, mixed_int) &
-        result(coords)
+    function get_grid(x, boundary_val_2, n, mixed_lims, mu_1, m_1, mass_c, config_a, mixed_int, &
+        sub_comm, sub_comm_size, rank) result(coords)
 
         implicit none
 
@@ -1158,8 +1223,25 @@ contains
         real(wp), intent(in) :: x, boundary_val_2, mixed_lims(4), mu_1, m_1, mass_c
         logical, intent(in) :: config_a, mixed_int
 
-        integer :: i, j, k
+        ! MPI variables
+        integer, intent(in) :: sub_comm, sub_comm_size, rank
+
+        integer :: i, j, imin, imax, progress, num_values
         real(wp) :: y, z, width(2), coords(2, n(1)+1, n(2)+1), lims(4)
+        logical :: verbose
+
+        ! MPI variables
+        integer :: ierr, recv_status(MPI_STATUS_SIZE)
+
+        ! verbose = .true.
+        verbose = .false.
+
+        ! Initialise coords array
+        do i = 1, n(1)+1
+            do j = 1, n(2)+1
+                coords(:, i, j) = (/ 0._wp, 0._wp /)
+            end do
+        end do
 
         if (mixed_int) then
             ! R_b or R_a, and gamma_ab limits already defined
@@ -1179,8 +1261,28 @@ contains
             width(1) = abs(lims(2) - lims(1)) / real(n(1), kind=wp)
         end if
 
-        ! Loop over R_b or R_a values
-        do i = 0, n(1)
+        ! Divide calculation of coordinates (i runs between 0 and n(1) overall)
+        imin = rank * n(1) / sub_comm_size
+        if (rank == sub_comm_size - 1) then
+            imax = n(1)
+        else
+            imax = -1 + (rank + 1) * n(1) / sub_comm_size
+        end if
+
+        ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
+
+        ! Loop over y values
+        do i = imin, imax
+
+            ! print progress every ~20% for each process
+            if ((imax - imin >= 4) .and. verbose) then
+                progress = 100 * (i - imin) / (imax - imin)
+                if (mod((i - imin), (imax - imin + 1) / 5) == 0 &
+                .or. i == imax) then
+                    print *, "On rank", rank, "...Progress... ", progress, "%"
+                end if
+            end if
+
             y = lims(1) + real(i, kind=wp) * width(1)
 
             if (.not. mixed_int) then
@@ -1200,6 +1302,34 @@ contains
                 coords(:, i+1, j+1) = (/ y, z /)
             end do
         end do
+
+        ! Send all coords to rank 0
+        if (rank == 0) then
+            ! Receive from all other ranks
+            do i = 1, sub_comm_size - 1
+                    imin = i * n(1) / sub_comm_size
+                    if (i == sub_comm_size - 1) then
+                            imax = n(1)
+                    else
+                            imax = -1 + (i + 1) * n(1) / sub_comm_size
+                    end if
+
+                    num_values = (imax - imin + 1) * 2 * (n(2)+1)
+                    call MPI_Recv(coords(:, imin+1:imax+1, :), num_values, &
+                            MPI_DOUBLE_PRECISION, i, 0, sub_comm, recv_status, ierr)
+            end do
+        else
+            ! All non-zero ranks send to rank 0
+            num_values = (imax - imin + 1) * 2 * (n(2)+1)
+            call MPI_Ssend(coords(:, imin+1:imax+1, :), num_values, MPI_DOUBLE_PRECISION, 0, 0, &
+                sub_comm, ierr)
+        end if
+
+        ! All sends/receives complete
+        call MPI_Barrier(sub_comm, ierr)
+        ! Broadcast so all processes have coords - replace recv, send and bcast with gatherv in future
+        call MPI_Bcast(coords, 2*(n(1)+1)*(n(2)+1), MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
+        call MPI_Barrier(sub_comm, ierr)
 
     end function get_grid
 
@@ -1415,6 +1545,9 @@ contains
 
         ! All sends/receives complete
         call MPI_Barrier(sub_comm, ierr)
+        ! Broadcast so all processes have amps - replace recv, send and bcast with gatherv in future
+        call MPI_Bcast(amps, n*nt, MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
+        call MPI_Barrier(sub_comm, ierr)
 
     end function calc_old_amps
 
@@ -1482,7 +1615,7 @@ contains
 
         ! Calculate all grid points for Simpson's integration of arrangement A
         coords_a = get_grid(boundary_val_1, boundary_val_2, simpson_n_1, lims_1, mu_a, m_b, &
-            mass_c, config_a, mixed_int)
+            mass_c, config_a, mixed_int, sub_comm, sub_comm_size, rank)
 
         ! Check the timer after grid points calculated, before grid transformation
         call MPI_Barrier(sub_comm, ierr)
@@ -1500,7 +1633,7 @@ contains
         ! for all mixed coordinates, else calculate mixed Jacobi coordinates (R_a, R_b, gamma_ab)
         ! for all single coordinates
         trans_coords_a = transform_grid(boundary_val_1, coords_a, simpson_n_1, mu_a, m_b, mass_c, &
-            config_a, mixed_int)
+            config_a, mixed_int, sub_comm, sub_comm_size, rank)
 
         ! Check the timer after grid points transformation, before amplitudes calculated
         call MPI_Barrier(sub_comm, ierr)
@@ -1561,7 +1694,7 @@ contains
 
         ! Calculate all grid points for Simpson's integration of arrangement B
         coords_b = get_grid(boundary_val_1, boundary_val_2, simpson_n_1, lims_1, mu_b, m_a, &
-            mass_c, config_a, mixed_int)
+            mass_c, config_a, mixed_int, sub_comm, sub_comm_size, rank)
 
         ! Check the timer after grid points calculated, before grid transformation
         call MPI_Barrier(sub_comm, ierr)
@@ -1579,7 +1712,7 @@ contains
         ! for all mixed coordinates, else calculate mixed Jacobi coordinates (R_a, R_b, gamma_ab)
         ! for all single coordinates
         trans_coords_b = transform_grid(boundary_val_1, coords_b, simpson_n_1, mu_b, m_a, mass_c, &
-            config_a, mixed_int)
+            config_a, mixed_int, sub_comm, sub_comm_size, rank)
 
         ! Check the timer after grid points transformation, before amplitudes calculated
         call MPI_Barrier(sub_comm, ierr)
