@@ -99,11 +99,10 @@ program jacobi
         print *, "Integration time: ", t_diff
     end if
 
+    mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, mu_a, &
+        mu_b, m_a, m_b, mass_c, .true., .false., .false., comm)
     if (rank == 0) then
         ! Calculate integral for R_a, R_b and gamma_ab using Simpson's rule on each in turn
-        mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, &
-        mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, mass_c, .true., .false., .false., &
-            sub_comm)
         print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
             mixed_Simpson_integral
     end if
@@ -318,7 +317,7 @@ contains
     ! Calculate gamma_a from R_a, r_a and gamma_ab
     ! R_b is calculated first, and -100._wp is returned if it is invalid
     function calc_gamma_a(small_r_a, mu_a, R_a, mass_c, gamma_ab, m_b, lims, rand_root, &
-        pos_root) result(coord)
+        pos_root) result(gamma_a)
 
         implicit none
 
@@ -326,11 +325,12 @@ contains
         logical, intent(in) :: rand_root, pos_root
 
         logical :: positive_root
-        ! coord = gamma_a
-        real(wp) :: cos_numerator, cos_denominator, cos_coord, coord, temp_R_b_1, temp_R_b_2, &
-            R_b_over_m_b, rand_num, round_error
 
-        round_error = 0.00001
+        real(wp) :: cos_numerator, gamma_a, temp_R_b_1, temp_R_b_2, R_b_over_m_b, rand_num, &
+            gamma_tol, R_b_tol
+
+            gamma_tol = 0.0000001_wp
+            R_b_tol = 0.0000001_wp
 
         if (rand_root) then
             call random_number(rand_num)
@@ -343,21 +343,19 @@ contains
             positive_root = pos_root
         end if
 
-        cos_denominator = small_r_a
-
         ! gamma_a is undefined if either R_a = 0 or r_a = 0
-        if (cos_denominator == 0._wp .or. R_a == 0._wp) then
-            coord = 0._wp
+        if (small_r_a == 0._wp .or. R_a == 0._wp) then
+            gamma_a = 0._wp
             return
         end if
 
         ! Calculate R_b / m_b
-        temp_R_b_1 = (cos_denominator / mu_a)**2._wp + (R_a / mass_c)**2._wp * &
+        temp_R_b_1 = (small_r_a / mu_a)**2._wp + (R_a / mass_c)**2._wp * &
             (cos(gamma_ab)**2._wp - 1._wp)
 
         ! Must be positive as will be square rooted
         if (temp_R_b_1 < 0._wp) then
-            coord = -100._wp
+            gamma_a = -100._wp
             return
         else
             temp_R_b_2 = - (R_a / mass_c) * cos(gamma_ab)
@@ -381,13 +379,13 @@ contains
             if ( (R_b_over_m_b < lims(3) / m_b) &
             .or. (R_b_over_m_b > lims(4) / m_b) ) then
                 if (R_b_over_m_b > lims(4) / m_b &
-                .and. R_b_over_m_b < round_error + lims(4) / m_b) then
+                .and. R_b_over_m_b < R_b_tol + lims(4) / m_b) then
                     R_b_over_m_b = lims(4) / m_b
                 else if (R_b_over_m_b < lims(3) / m_b &
-                .and. R_b_over_m_b > - round_error + lims(3) / m_b) then
+                .and. R_b_over_m_b > - R_b_tol + lims(3) / m_b) then
                     R_b_over_m_b = lims(3) / m_b
                 else
-                    coord = -100._wp
+                    gamma_a = -100._wp
                     return
                 end if
             end if
@@ -395,17 +393,29 @@ contains
 
         cos_numerator = - mu_a * ( (R_a / mass_c) + R_b_over_m_b * cos(gamma_ab) )
 
-        cos_coord = cos_numerator / cos_denominator
+        gamma_a = cos_numerator / small_r_a
 
-        ! Temporary to prevent NaN when taking acos - there is probably a better solution!
-        if (cos_coord > 1._wp) then
-            cos_coord = 1._wp
-        end if
-        if (cos_coord < -1._wp) then
-            cos_coord = -1._wp
-        end if
+        ! Prevent NaN when taking acos - there is probably a better solution!
+        if (gamma_a > 1._wp) then
+                if (gamma_a <= (1._wp+gamma_tol)) then
+                    gamma_a = 1._wp
+                else
+                    print *, "Warning: invalid gamma_a: ", gamma_a
+                    gamma_a = 1._wp
+                    stop
+                end if
+            end if
+            if (gamma_a < -1._wp) then
+                if (gamma_a >= -(1._wp+gamma_tol)) then
+                    gamma_a = -1._wp
+                else
+                    print *, "Warning: invalid gamma_a: ", gamma_a
+                    gamma_a = -1._wp
+                    stop
+                end if
+            end if
 
-        coord = acos(cos_coord)
+        gamma_a = acos(gamma_a)
 
     end function calc_gamma_a
 
@@ -1031,14 +1041,14 @@ contains
         real(wp), intent(in) :: R_a, small_r_a, mixed_lims(6), mu_a, m_b, mass_c
         logical, intent(in) :: get_r_lims, get_gamma_lims, estimate_lims
 
-        real(wp) :: lims(2), round_error, temp_gamma
+        real(wp) :: lims(2), gamma_tol, temp_gamma
 
         if (get_r_lims .and. get_gamma_lims) then
             print *, "Only one coordinate flag should be set to true"
             stop
         end if
 
-        round_error = 0.000001
+        gamma_tol = 0.0000001_wp
 
         if (get_r_lims) then
             if (estimate_lims) then
@@ -1084,7 +1094,7 @@ contains
                         lims(1) = 0._wp
                     else if (lims(1) < -1._wp) then
                         ! Allow for rounding errors near pi
-                        if (lims(1) > -(1._wp+round_error)) then
+                        if (lims(1) > -(1._wp+gamma_tol)) then
                             lims(1) = acos(-1._wp)
                         else
                             lims(1) = 0._wp
