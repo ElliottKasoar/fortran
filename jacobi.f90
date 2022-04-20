@@ -434,8 +434,8 @@ contains
         logical :: verbose, save_lims
 
         ! MPI variables
-        integer :: sub_comm_size, ierr, request_1, request_2, r_tag, gamma_tag, &
-            recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
+        integer :: sub_comm_size, ierr, r_tag, gamma_tag, recv_status_1(MPI_STATUS_SIZE), &
+                recv_status_2(MPI_STATUS_SIZE)
 
         verbose = .true.
         save_lims = .true.
@@ -667,11 +667,11 @@ contains
                 ! All non-zero ranks send to rank 0
                 num_r_values = (imax - imin + 1) * 3
                 call MPI_Ssend(r_lims(:, imin+1:imax+1), num_r_values, MPI_DOUBLE_PRECISION, &
-                    0, r_tag, sub_comm, request_1, ierr)
+                    0, r_tag, sub_comm, ierr)
 
                 num_gamma_values = (imax - imin + 1) * 4 * (n(2) + 1)
                 call MPI_Ssend(gamma_lims(:, imin+1:imax+1, :), num_gamma_values, &
-                    MPI_DOUBLE_PRECISION, 0, gamma_tag, sub_comm, request_2, ierr)
+                    MPI_DOUBLE_PRECISION, 0, gamma_tag, sub_comm, ierr)
             end if
         end if
 
@@ -724,8 +724,8 @@ contains
         logical :: verbose, save_lims
 
         ! MPI variables
-        integer :: sub_comm_size, ierr, request_1, request_2, r_tag, gamma_tag, &
-        recv_status_1(MPI_STATUS_SIZE), recv_status_2(MPI_STATUS_SIZE)
+        integer :: sub_comm_size, ierr, r_tag, gamma_tag, recv_status_1(MPI_STATUS_SIZE), &
+                recv_status_2(MPI_STATUS_SIZE)
 
         verbose = .true.
         save_lims = .false.
@@ -849,11 +849,11 @@ contains
                 ! All non-zero ranks send to rank 0
                 num_r_values = (imax - imin + 1) * 3
                 call MPI_Ssend(r_lims(:, imin+1:imax+1), num_r_values, MPI_DOUBLE_PRECISION, &
-                    0, r_tag, sub_comm, request_1, ierr)
+                    0, r_tag, sub_comm, ierr)
 
                 num_gamma_values = (imax - imin + 1) * 4
                 call MPI_Ssend(gamma_lims(:, imin+1:imax+1), num_gamma_values, &
-                    MPI_DOUBLE_PRECISION, 0, gamma_tag, sub_comm, request_2, ierr)
+                    MPI_DOUBLE_PRECISION, 0, gamma_tag, sub_comm, ierr)
             end if
         end if
 
