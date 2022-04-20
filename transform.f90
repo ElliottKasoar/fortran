@@ -1197,7 +1197,7 @@ contains
     ! Transform surface amplitudes w_ik from mixed to single Jacobi coordinates
     function transform_amps(old_amps, n_1, nc_1, nt, simpson_n, boundary_val_1, &
         boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, coords, trans_coords, config_a, mixed_int, &
-        sub_comm) result(amps)
+        sub_comm, sub_comm_size) result(amps)
 
       implicit none
 
@@ -1208,16 +1208,15 @@ contains
         logical, intent(in) :: config_a, mixed_int
 
         ! MPI variables
-        integer, intent(in) :: sub_comm
+        integer, intent(in) :: sub_comm, sub_comm_size
 
-        integer :: i, k, n, m, imin, imax, progress, num_values
+        integer :: i, k, n, m, imin, imax, progress, num_values, counts(sub_comm_size), &
+            disps(sub_comm_size)
         real(wp) :: integral_1(n_1), integral_2(nt), amps(n_1, nt)
         logical :: verbose, channel_func_1, single_func_1, channel_func_2, single_func_2
 
         ! MPI variables
-        integer :: sub_comm_size, ierr, request, recv_status(MPI_STATUS_SIZE)
-
-        call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
+        integer :: ierr, request, recv_status(MPI_STATUS_SIZE)
 
         verbose = .true.
 
@@ -1231,9 +1230,9 @@ contains
         ! Divide calculation of amps (i runs between 1 and n_1 overall)
         imin = 1 + rank * n_1 / sub_comm_size
         if (rank == sub_comm_size - 1) then
-                imax = n_1
+            imax = n_1
         else
-                imax = (rank + 1) * n_1 / sub_comm_size
+            imax = (rank + 1) * n_1 / sub_comm_size
         end if
 
         ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
@@ -1244,7 +1243,7 @@ contains
                 progress = 100 * (i - imin) / (imax - imin)
                 if (mod((i - imin), (imax - imin + 1) / 5) == 0 &
                 .or. i == imax) then
-                        print *, "On rank", rank, "...Progress... ", progress, "%"
+                    print *, "On rank", rank, "...Progress... ", progress, "%"
                 end if
             end if
 
@@ -1287,27 +1286,26 @@ contains
 
         ! Send all amps to rank 0
         if (rank == 0) then
-                ! Receive from all other ranks
-                do i = 1, sub_comm_size - 1
-                        imin = 1 + i * n_1 / sub_comm_size
-                        if (i == sub_comm_size - 1) then
-                                imax = n_1
-                        else
-                                imax = (i + 1) * n_1 / sub_comm_size
-                        end if
+            ! Receive from all other ranks
+            do i = 0, sub_comm_size - 1
+                imin = 1 + i * n_1 / sub_comm_size
+                    if (i == sub_comm_size - 1) then
+                        imax = n_1
+                    else
+                        imax = (i + 1) * n_1 / sub_comm_size
+                    end if
 
-                        num_values = (imax - imin + 1) * nt
-                        call MPI_Recv(amps(imin:imax, :), num_values, &
-!                                MPI_REAL, i, 0, sub_comm, recv_status, ierr)
-                                MPI_DOUBLE_PRECISION, i, 0, sub_comm, recv_status, ierr)
-                end do
+                    counts(i+1) = (imax - imin + 1) * nt
+                    disps(i+1) = imin - 1
+            end do
+
+            call MPI_GatherV(MPI_IN_PLACE, counts(1), MPI_DOUBLE_PRECISION, amps, counts, disps, &
+                MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
         else
-                ! All non-zero ranks send to rank 0
-                num_values = (imax - imin + 1) * nt
-!                call MPI_Ssend(amps(imin:imax, :), num_values, MPI_REAL, 0, 0, sub_comm, &
-                call MPI_Ssend(amps(imin:imax, :), num_values, MPI_DOUBLE_PRECISION, 0, 0, sub_comm, &
-!                    request, ierr)
-                    ierr)
+            ! All non-zero ranks send to rank 0
+            num_values = (imax - imin + 1) * nt
+            call MPI_GatherV(amps(imin:imax, :), num_values, MPI_DOUBLE_PRECISION, amps, counts, &
+                disps, MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
         end if
 
         ! All sends/receives complete
@@ -1377,7 +1375,9 @@ contains
         double precision :: time(9), t_diff
 
         ! MPI variables
-        integer :: ierr
+        integer :: sub_comm_size, ierr
+
+        call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
 
         ! Initialise old amps
         do i = 1, n_1 + n_2
@@ -1466,7 +1466,7 @@ contains
         ! Transform surface amplitudes at R_a boundary
         new_amps(:n_1, :) = transform_amps(old_amps(:n_1, :), n_1, nc_1, nt, simpson_n_1, &
             boundary_val_1, boundary_val_2, mu_a, mu_b, m_b, m_a, mass_c, coords_a, &
-            trans_coords_a, config_a, mixed_int, sub_comm)
+            trans_coords_a, config_a, mixed_int, sub_comm, sub_comm_size)
 
         ! Check the timer after surface amplitude transformation, before grid points calculated
         call MPI_Barrier(sub_comm, ierr)
@@ -1544,7 +1544,7 @@ contains
         ! Transform surface amplitudes at R_b boundary
         new_amps(n_1+1:, :) = transform_amps(old_amps(n_1+1:, :), n_2, nc_2, nt, simpson_n_1, &
             boundary_val_1, boundary_val_2, mu_b, mu_a, m_a, m_b, mass_c, coords_b, &
-            trans_coords_b, config_a, mixed_int, sub_comm)
+            trans_coords_b, config_a, mixed_int, sub_comm, sub_comm_size)
 
         ! Check the timer after surface amplitude transformation, before end of subroutine
         call MPI_Barrier(sub_comm, ierr)
