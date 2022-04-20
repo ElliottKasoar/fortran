@@ -50,7 +50,7 @@ program transform
     ! At the R_a boundary, R_a = R_a_max and remaining four limits used
     ! At the R_b boundary, R_b = R_b_max and remaining four limits used
     ! Note: 4._wp*atan(1._wp) = pi
-    mixed_lims = (/ 0.0_wp, 3._wp, 0.0_wp, 5._wp, 0.0_wp, 4._wp*atan(1._wp) /)
+    mixed_lims = (/ 0._wp, 3._wp, 0._wp, 5._wp, 0._wp, 4._wp*atan(1._wp) /)
 
     ! Calculate mass relations (three masses defined within)
     call calc_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
@@ -60,7 +60,7 @@ program transform
         if (mixed_int) then
             mixed_int_value = 1._wp
         else
-            mixed_int_value = 0.0_wp
+            mixed_int_value = 0._wp
         end if
 
         values = (/ mass_a, mass_b, mass_c, mixed_lims(1), mixed_lims(2), mixed_lims(3), &
@@ -132,18 +132,18 @@ contains
         mass_c = 1._wp
 
         ! Sum of masses
-        mass_total = 0.0_wp
+        mass_total = 0._wp
         mass_total = mass_a + mass_b + mass_c
 
         ! Internal reduced masses
-        m_a = 0.0_wp
-        m_b = 0.0_wp
+        m_a = 0._wp
+        m_b = 0._wp
         m_a = mass_b * mass_c / (mass_b + mass_c)
         m_b = mass_a * mass_c / (mass_a + mass_c)
 
         ! Reduced channel masses
-        mu_a = 0.0_wp
-        mu_b = 0.0_wp
+        mu_a = 0._wp
+        mu_b = 0._wp
         mu_a = mass_a * mass_b * mass_c / (mass_total * m_a)
         mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
@@ -209,7 +209,7 @@ contains
         integer :: i, j
 
         ! psi defined for 1 to n_1*nc_1 or 1 to n_2*nc_2 (passed in as n_1 and nc_2 in either case)
-        func = 0.0_wp
+        func = 0._wp
         do i = 1, n_1
             do j = 1, nc_1
                 func = func + (get_single_phi(i, boundary_val_2, R_1, small_r_1, gamma_1, &
@@ -239,7 +239,7 @@ contains
         integer :: i, j
 
         ! psi defined for 1 to n_1*nc_1 or 1 to n_2*nc_2 (passed in as n_1 and nc_2 in either case)
-        func = 0.0_wp
+        func = 0._wp
         do i = 1, n_1
             do j = 1, nc_1
                 func = func + (get_mixed_phi(i, boundary_val_2, R_1, R_2, gamma_ab, config_a, &
@@ -446,8 +446,8 @@ contains
 
             verbose = .true.
 
-            total_integral = 0.0_wp
-            temp_integral = 0.0_wp
+            total_integral = 0._wp
+            temp_integral = 0._wp
 
             ! Get range of y for current x
             width(1) = abs(coords(1, 1, 1) - coords(1, simpson_n(1)+1, 1))
@@ -461,7 +461,7 @@ contains
                 y = coords(1, i+1, 1)
 
                 ! Total z integral given x and y
-                z_integral = 0.0_wp
+                z_integral = 0._wp
 
                 ! Get range of z for current x and y
                 width(2) = abs(coords(2, i+1, 1) - coords(2, i+1, simpson_n(2)+1))
@@ -469,7 +469,7 @@ contains
 
                 do j = 0, simpson_n(2)
 
-                    if (width(2) == 0.0_wp) then
+                    if (width(2) == 0._wp) then
                         exit
                     end if
 
@@ -569,7 +569,7 @@ contains
                         mixed_coords(2), mu_1, m_1, mass_c, .true., .true., config_a)
 
                     ! If R_b is invalid, ignore gamma calculated
-                    if (temp_gamma /= -100.0_wp) then
+                    if (temp_gamma /= -100._wp) then
                         count = count + 1
                         test_coord(count) = temp_gamma
                     end if
@@ -601,7 +601,7 @@ contains
                         mixed_coords(2), mu_1, m_1, mass_c, .true., .true., config_a)
 
                     ! If R_2 is invalid, ignore gamma calculated
-                    if (temp_gamma /= -100.0_wp) then
+                    if (temp_gamma /= -100._wp) then
                         count = count + 1
                         test_coord(count) = temp_gamma
                     end if
@@ -630,7 +630,7 @@ contains
                             mixed_coords(2), mu_1, m_1, mass_c, .true., .true., config_a)
 
                         ! If R_2 is invalid, ignore gamma_1 calculated
-                        if (temp_gamma /= -100.0_wp) then
+                        if (temp_gamma /= -100._wp) then
                             count = count + 1
                             test_coord(count) = temp_gamma
                         end if
@@ -643,8 +643,8 @@ contains
             single_lims(1) = minval(test_coord(1:count))
             single_lims(2) = maxval(test_coord(1:count))
         else
-            single_lims(1) = 0.0_wp
-            single_lims(2) = 0.0_wp
+            single_lims(1) = 0._wp
+            single_lims(2) = 0._wp
         end if
 
     end function estimate_jacobi_lims
@@ -669,7 +669,7 @@ contains
 
         if (get_r_lims) then
             if (estimate_lims) then
-                lims(1:2) = estimate_jacobi_lims(mixed_lims, R_1, 0.0_wp, mu_1, m_1, mass_c, &
+                lims(1:2) = estimate_jacobi_lims(mixed_lims, R_1, 0._wp, mu_1, m_1, mass_c, &
                     .true., .false., config_a)
             else
                 ! If gamma_ab can be greater than pi/2, cos(gamma_ab) < 0 is possible
@@ -704,9 +704,9 @@ contains
                 ! Use with caution
 
                 ! gamma_a is undefined for R_1 = 0 or r_1 = 0
-                if (R_1 == 0.0_wp .or. small_r_1 == 0.0_wp) then
-                    lims(1) = 0.0_wp
-                    lims(2) = 0.0_wp
+                if (R_1 == 0._wp .or. small_r_1 == 0._wp) then
+                    lims(1) = 0._wp
+                    lims(2) = 0._wp
                 else
                     ! Calculate cos(gamma_1) when R_2 is maximum
                     ! to get the minimum gamma_1
@@ -717,13 +717,13 @@ contains
                     ! There may be no valid cos(gamma_a) for maximum R_b
                     ! In this case, gamma_a spans full range
                     if (lims(1) > 1._wp) then
-                        lims(1) = 0.0_wp
+                        lims(1) = 0._wp
                     else if (lims(1) < -1._wp) then
                         ! Allow for rounding errors near pi
                         if (lims(1) > -(1._wp+gamma_tol)) then
                             lims(1) = acos(-1._wp)
                         else
-                            lims(1) = 0.0_wp
+                            lims(1) = 0._wp
                         end if
                     else
                         lims(1) = acos(lims(1))
@@ -735,24 +735,24 @@ contains
                     ! Test gamma_ab minimum for +- roots
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                         mixed_lims(3), mu_1, m_1, mass_c, .false., .true., config_a)
-                    if (temp_gamma /= -100.0_wp) then
+                    if (temp_gamma /= -100._wp) then
                         lims(2) = temp_gamma
                     end if
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                         mixed_lims(3), mu_1, m_1, mass_c, .false., .false., config_a)
-                    if (temp_gamma /= -100.0_wp .and. temp_gamma > lims(2)) then
+                    if (temp_gamma /= -100._wp .and. temp_gamma > lims(2)) then
                         lims(2) = temp_gamma
                     end if
 
                     ! Test gamma_ab maximum for +- roots
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                         mixed_lims(4), mu_1, m_1, mass_c, .false., .true., config_a)
-                    if (temp_gamma /= -100.0_wp .and. temp_gamma > lims(2)) then
+                    if (temp_gamma /= -100._wp .and. temp_gamma > lims(2)) then
                             lims(2) = temp_gamma
                     end if
                     temp_gamma = calc_gamma_from_integral(mixed_lims, R_1, small_r_1, &
                             mixed_lims(4), mu_1, m_1, mass_c, .false., .false., config_a)
-                    if (temp_gamma /= -100.0_wp .and. temp_gamma > lims(2)) then
+                    if (temp_gamma /= -100._wp .and. temp_gamma > lims(2)) then
                             lims(2) = temp_gamma
                     end if
                 end if
@@ -781,7 +781,7 @@ contains
             r = mu_1 * sqrt(r)
         else
             print *, "Warning: invalid r: ", r
-            r = 0.0_wp
+            r = 0._wp
         end if
 
     end function calc_small_r_from_mixed
@@ -811,8 +811,8 @@ contains
         end if
 
         ! Catch numerical errors
-        if (R_2 < 0.0_wp) then
-            R_2 = 0.0_wp
+        if (R_2 < 0._wp) then
+            R_2 = 0._wp
         else
             R_2 = m_1 * sqrt(R_2)
         end if
@@ -835,16 +835,16 @@ contains
         gamma_tol = 0.0000001_wp
 
         ! Angle undefined for R_1 = 0
-        if (R_1 == 0.0_wp) then
-            gamma_1 = 0.0_wp
+        if (R_1 == 0._wp) then
+            gamma_1 = 0._wp
             return
         end if
 
         r = calc_small_r_from_mixed(R_1, R_2, gamma_ab, mu_1, m_1, mass_c)
 
         ! Angle undefined for r = 0
-        if (r == 0.0_wp) then
-            gamma_1 = 0.0_wp
+        if (r == 0._wp) then
+            gamma_1 = 0._wp
             return
         end if
 
@@ -895,8 +895,8 @@ contains
         real(wp) :: gamma_ab, gamma_tol, R_2
 
         ! Angle undefined for R_1 = 0
-        if (R_1 == 0.0_wp) then
-            gamma_ab = 0.0_wp
+        if (R_1 == 0._wp) then
+            gamma_ab = 0._wp
             return
         end if
 
@@ -905,8 +905,8 @@ contains
         R_2 = calc_R_from_single(R_1, small_r_1, gamma_1, mu_1, m_1, mass_c, config_a)
 
         ! Angle undefined for R_2 = 0
-        if (R_2 == 0.0_wp) then
-            gamma_ab = 0.0_wp
+        if (R_2 == 0._wp) then
+            gamma_ab = 0._wp
             return
         end if
 
@@ -946,7 +946,7 @@ contains
 
     ! Calculate gamma_a from R_1 = R_a, r_1 = r_a and gamma_ab
     ! or gamma_b from R_1 = R_b, r_1 = r_b and gamma_ab
-    ! R_2 is calculated first, and -100.0_wp is returned if it is invalid
+    ! R_2 is calculated first, and -100._wp is returned if it is invalid
     function calc_gamma_from_integral(lims, R_1, small_r_1, gamma_ab, mu_1, m_1, mass_c, &
         rand_root, pos_root, config_a) result(gamma_1)
 
@@ -976,8 +976,8 @@ contains
         cos_denominator = small_r_1
 
         ! gamma_1 is undefined if either R_1 = 0 or r_1 = 0
-        if (cos_denominator == 0.0_wp .or. R_1 == 0.0_wp) then
-            gamma_1 = 0.0_wp
+        if (cos_denominator == 0._wp .or. R_1 == 0._wp) then
+            gamma_1 = 0._wp
             return
         end if
 
@@ -986,8 +986,8 @@ contains
             (cos(gamma_ab)**2._wp - 1._wp)
 
         ! Must be positive as will be square rooted
-        if (temp_R_2_1 < 0.0_wp) then
-            gamma_1 = -100.0_wp
+        if (temp_R_2_1 < 0._wp) then
+            gamma_1 = -100._wp
             return
         else
             temp_R_2_2 = - (R_1 / mass_c) * cos(gamma_ab)
@@ -1017,7 +1017,7 @@ contains
                 .and. R_2_over_m_1 > - R_2_tol + lims(1) / m_1) then
                     R_2_over_m_1 = lims(1) / m_1
                 else
-                    gamma_1 = -100.0_wp
+                    gamma_1 = -100._wp
                     return
                 end if
             end if
@@ -1158,11 +1158,11 @@ contains
             width(2) = abs(lims(4) - lims(3)) / real(n(2), kind=wp)
         else
             ! Calculate r_a or r_b limits
-            ! lims(1:2) = get_jacobi_lims(mixed_lims, x, 0.0_wp, mu_1, m_1, mass_c, .true., .false., &
+            ! lims(1:2) = get_jacobi_lims(mixed_lims, x, 0._wp, mu_1, m_1, mass_c, .true., .false., &
             !     .true., config_a)
             ! print *, "Estimate", lims(1:2)
 
-            lims(1:2) = get_jacobi_lims(mixed_lims, x, 0.0_wp, mu_1, m_1, mass_c, .true., .false., &
+            lims(1:2) = get_jacobi_lims(mixed_lims, x, 0._wp, mu_1, m_1, mass_c, .true., .false., &
                 .false., config_a)
             ! print *, "Analytical", lims(1:2)
 
@@ -1223,7 +1223,7 @@ contains
         ! Initialise amps array
         do i = 1, n_1
             do k = 1, nt
-                amps(i, k) = 0.0_wp
+                amps(i, k) = 0._wp
             end do
         end do
 
@@ -1382,14 +1382,14 @@ contains
         ! Initialise old amps
         do i = 1, n_1 + n_2
             do j = 1, nt
-                old_amps(i, j) = 0.0_wp
+                old_amps(i, j) = 0._wp
             end do
         end do
 
         ! Initialise transformed amps
         do i = 1, n_1 + n_2
             do j = 1, nt
-                new_amps(i, j) = 0.0_wp
+                new_amps(i, j) = 0._wp
             end do
         end do
 
