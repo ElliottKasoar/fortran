@@ -209,6 +209,7 @@ contains
         integer :: i, j
 
         ! psi defined for 1 to n_1*nc_1 or 1 to n_2*nc_2 (passed in as n_1 and nc_2 in either case)
+        func = 0.0_wp
         do i = 1, n_1
             do j = 1, nc_1
                 func = func + (get_single_phi(i, boundary_val_2, R_1, small_r_1, gamma_1, &
@@ -238,6 +239,7 @@ contains
         integer :: i, j
 
         ! psi defined for 1 to n_1*nc_1 or 1 to n_2*nc_2 (passed in as n_1 and nc_2 in either case)
+        func = 0.0_wp
         do i = 1, n_1
             do j = 1, nc_1
                 func = func + (get_mixed_phi(i, boundary_val_2, R_1, R_2, gamma_ab, config_a, &
@@ -303,10 +305,10 @@ contains
 
         if (config_a) then
             coeff = real(i, kind=wp) + real(j, kind=wp) + real(k, kind=wp)
-            coeff = 1 / coeff
+            coeff = 1.0_wp / coeff
         else
             coeff = real(i, kind=wp) + real(j, kind=wp) + real(k, kind=wp)
-            coeff = 1 / coeff
+            coeff = 1.0_wp / coeff
         end if
 
 
@@ -1197,6 +1199,8 @@ contains
         boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, coords, trans_coords, config_a, mixed_int, &
         sub_comm) result(amps)
 
+      implicit none
+
         integer, intent(in) :: n_1, nc_1, nt, simpson_n(2)
         real(wp), intent(in) :: old_amps(n_1, nt), boundary_val_1, boundary_val_2, mu_1, &
             mu_2, m_1, m_2, mass_c, coords(2, simpson_n(1)+1, simpson_n(2)+1), &
@@ -1294,13 +1298,16 @@ contains
 
                         num_values = (imax - imin + 1) * nt
                         call MPI_Recv(amps(imin:imax, :), num_values, &
-                                MPI_REAL, i, 0, sub_comm, recv_status, ierr)
+!                                MPI_REAL, i, 0, sub_comm, recv_status, ierr)
+                                MPI_DOUBLE_PRECISION, i, 0, sub_comm, recv_status, ierr)
                 end do
         else
                 ! All non-zero ranks send to rank 0
                 num_values = (imax - imin + 1) * nt
-                call MPI_Ssend(amps(imin:imax, :), num_values, MPI_REAL, 0, 0, sub_comm, &
-                    request, ierr)
+!                call MPI_Ssend(amps(imin:imax, :), num_values, MPI_REAL, 0, 0, sub_comm, &
+                call MPI_Ssend(amps(imin:imax, :), num_values, MPI_DOUBLE_PRECISION, 0, 0, sub_comm, &
+!                    request, ierr)
+                    ierr)
         end if
 
         ! All sends/receives complete
@@ -1332,7 +1339,7 @@ contains
         channel_func_1 = .true.
         single_func_1 = .false.
         channel_func_2 = .false.
-        single_func_1 = .false.
+        single_func_2 = .false.
 
         do i = 1, n
             do k = 1, nt
@@ -1349,6 +1356,8 @@ contains
     ! Transform surface amplitudes w_ik from mixed to single Jacobi coordinates
     subroutine transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, &
         m_a, m_b, mass_c, mixed_int, sub_comm)
+
+      implicit none
 
         integer, intent(in) :: n_1, nc_1, n_2, nc_2, nt, simpson_n(3)
         real(wp), intent(in) :: mixed_lims(6), mu_a, mu_b, m_a, m_b, mass_c
@@ -1384,7 +1393,8 @@ contains
             end do
         end do
 
-        verbose = .false.
+!        verbose = .false.
+        verbose = .true.
 
         ! At the R_a boundary
         config_a = .true.
@@ -1539,8 +1549,8 @@ contains
         ! Check the timer after surface amplitude transformation, before end of subroutine
         call MPI_Barrier(sub_comm, ierr)
         if (rank == 0 .and. verbose) then
-            t_diff = time(9) - time(8)
             time(9) = MPI_Wtime()
+            t_diff = time(9) - time(8)
             print *, "Surface amplitude transformation time: ", t_diff
         end if
 
