@@ -12,113 +12,122 @@ program transform
 
     implicit none
 
-    integer :: simpson_n(3), i, k, n_1, nc_1, n_2, nc_2, b, nt
-    real(wp) :: mixed_lims(6), integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, &
-        m_b, values(10), mixed_int_value
-    logical :: save_inputs, mixed_int
-
-    ! MPI variables
-    integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
-    double precision :: time(4), t_diff
-
-    ! Initialise MPI
-    comm = MPI_COMM_WORLD
-    call MPI_Init(ierr)
-
-    ! Start the timer
-    call MPI_Barrier(comm, ierr)
-    time(1) = MPI_Wtime()
-
-    call MPI_Comm_rank(comm, rank, ierr)
-    call MPI_Comm_size(comm, comm_size, ierr)
-
-    ! Create new group with only process 0, and create corresponding new comm
-    sub_ranks(1) = 0
-    call MPI_Comm_group(comm, group, ierr);
-    call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
-    call MPI_Comm_create(MPI_COMM_WORLD, sub_group, sub_comm, ierr)
-
-    save_inputs = .true.
-
-    ! Number of Simpson cells to split Jacobi ingegral into
-    ! (R_b_n, gamma_ab_n) at the R_a boundary or (R_a_n, gamma_ab_n) at the R_b boundary
-    simpson_n = (/ 100, 100, 100 /)
-
-    ! Limits of integration for mixed Jacobi coordinates
-    ! Also defines R_a and R_b boundaries used with single Jacobi coordinates
-    ! (R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max)
-    ! At the R_a boundary, R_a = R_a_max and remaining four limits used
-    ! At the R_b boundary, R_b = R_b_max and remaining four limits used
-    ! Note: 4._wp*atan(1._wp) = pi
-    mixed_lims = (/ 0._wp, 3._wp, 0._wp, 5._wp, 0._wp, 4._wp*atan(1._wp) /)
-
-    ! Calculate mass relations (three masses defined within)
-    call calc_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
-
-    if (rank == 0 .and. save_inputs) then
-
-        if (mixed_int) then
-            mixed_int_value = 1._wp
-        else
-            mixed_int_value = 0._wp
-        end if
-
-        values = (/ mass_a, mass_b, mass_c, mixed_lims(1), mixed_lims(2), mixed_lims(3), &
-            mixed_lims(4), mixed_lims(5), mixed_lims(6), mixed_int_value /)
-        open (unit=41, file='outputs/values', form='unformatted')
-        write(41) values
-        close (unit=41)
-    end if
-
-    n_1 = 3 ! Number of channel functions for configuration A
-    nc_1 = 2 ! Number of radial continuum basis orbitals for configuration A
-    n_2 = 2 ! Number of channel functions for configuration B
-    nc_2 = 1 ! Number of radial continuum basis orbitals for configuration B
-    b = 0 ! Number of quadratically integrably functions - not used
-    nt = n_1 * nc_1 + n_2 * nc_2 + b ! Number of linearly indep basis functions
-
-    if (rank == 0) then
-        print *, "Transforming in mixed basis..."
-    end if
-
-    ! Check the timer before first transformation
-    call MPI_Barrier(comm, ierr)
-    time(2) = MPI_Wtime()
-
-    mixed_int = .true.
-    call transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, m_a, &
-        m_b, mass_c, mixed_int, comm)
-
-    ! Check the timer after first transformation, before second transformation
-    call MPI_Barrier(comm, ierr)
-    time(3) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(3) - time(2)
-        print *, "Integration time: ", t_diff
-    end if
-
-    if (rank == 0) then
-        print *, "Transforming in single basis..."
-    end if
-
-    mixed_int = .false.
-    call transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, m_a, &
-        m_b, mass_c, mixed_int, comm)
-
-    ! Check the timer after second transformation, at end of program
-    call MPI_Barrier(comm, ierr)
-    time(4) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(4) - time(3)
-        print *, "Integration time: ", t_diff
-
-        t_diff = time(4) - time(1)
-        print *, "Program time: ", t_diff
-    end if
-
-    call MPI_Finalize(ierr)
+    call main()
 
 contains
+
+    subroutine main()
+
+        implicit none
+
+        integer :: simpson_n(3), i, k, n_1, nc_1, n_2, nc_2, b, nt
+        real(wp) :: mixed_lims(6), integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, &
+            m_b, values(10), mixed_int_value
+        logical :: save_inputs, mixed_int
+
+        ! MPI variables
+        integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
+        double precision :: time(4), t_diff
+
+        ! Initialise MPI
+        comm = MPI_COMM_WORLD
+        call MPI_Init(ierr)
+
+        ! Start the timer
+        call MPI_Barrier(comm, ierr)
+        time(1) = MPI_Wtime()
+
+        call MPI_Comm_rank(comm, rank, ierr)
+        call MPI_Comm_size(comm, comm_size, ierr)
+
+        ! Create new group with only process 0, and create corresponding new comm
+        sub_ranks(1) = 0
+        call MPI_Comm_group(comm, group, ierr);
+        call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
+        call MPI_Comm_create(comm, sub_group, sub_comm, ierr)
+
+        save_inputs = .true.
+
+        ! Number of Simpson cells to split Jacobi ingegral into
+        ! (R_b_n, gamma_ab_n) at the R_a boundary or (R_a_n, gamma_ab_n) at the R_b boundary
+        simpson_n = (/ 100, 100, 100 /)
+
+        ! Limits of integration for mixed Jacobi coordinates
+        ! Also defines R_a and R_b boundaries used with single Jacobi coordinates
+        ! (R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max)
+        ! At the R_a boundary, R_a = R_a_max and remaining four limits used
+        ! At the R_b boundary, R_b = R_b_max and remaining four limits used
+        ! Note: 4._wp*atan(1._wp) = pi
+        mixed_lims = (/ 0._wp, 3._wp, 0._wp, 5._wp, 0._wp, 4._wp*atan(1._wp) /)
+
+        ! Calculate mass relations (three masses defined within)
+        call calc_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
+
+        if (rank == 0 .and. save_inputs) then
+
+            if (mixed_int) then
+                mixed_int_value = 1._wp
+            else
+                mixed_int_value = 0._wp
+            end if
+
+            values = (/ mass_a, mass_b, mass_c, mixed_lims(1), mixed_lims(2), mixed_lims(3), &
+                mixed_lims(4), mixed_lims(5), mixed_lims(6), mixed_int_value /)
+            open (unit=41, file='outputs/values', form='unformatted')
+            write(41) values
+            close (unit=41)
+        end if
+
+        n_1 = 3 ! Number of channel functions for configuration A
+        nc_1 = 2 ! Number of radial continuum basis orbitals for configuration A
+        n_2 = 2 ! Number of channel functions for configuration B
+        nc_2 = 1 ! Number of radial continuum basis orbitals for configuration B
+        b = 0 ! Number of quadratically integrably functions - not used
+        nt = n_1 * nc_1 + n_2 * nc_2 + b ! Number of linearly indep basis functions
+
+        if (rank == 0) then
+            print *, "Transforming in mixed basis..."
+        end if
+
+        ! Check the timer before first transformation
+        call MPI_Barrier(comm, ierr)
+        time(2) = MPI_Wtime()
+
+        mixed_int = .true.
+        call transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, m_a, &
+            m_b, mass_c, mixed_int, comm)
+
+        ! Check the timer after first transformation, before second transformation
+        call MPI_Barrier(comm, ierr)
+        time(3) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(3) - time(2)
+            print *, "Integration time: ", t_diff
+        end if
+
+        if (rank == 0) then
+            print *, "Transforming in single basis..."
+        end if
+
+        mixed_int = .false.
+        call transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, m_a, &
+            m_b, mass_c, mixed_int, comm)
+
+        ! Check the timer after second transformation, at end of program
+        call MPI_Barrier(comm, ierr)
+        time(4) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(4) - time(3)
+            print *, "Integration time: ", t_diff
+
+            t_diff = time(4) - time(1)
+            print *, "Program time: ", t_diff
+        end if
+
+        call MPI_Finalize(ierr)
+
+    end subroutine main
+
 
     subroutine calc_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
@@ -152,13 +161,13 @@ contains
     ! Channel functions (phi or theta) in single Jacobi coordinates
     ! If config_a, R_1 = R_a, small_r_1 = r_a and gamma_1 = gamma_a
     ! Else R_1 = R_b, small_r_1 = r_b and gamma_1 = gamma_b
-    function get_single_phi(i, boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1, config_a, &
-        conj) result(func)
+    function get_single_phi(i, boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1, mass_c, &
+        config_a, conj) result(func)
 
         implicit none
 
         integer, intent(in) :: i
-        real(wp), intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1
+        real(wp), intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
         logical, intent(in) :: config_a, conj
 
         real(wp) :: R_2, func
@@ -197,12 +206,12 @@ contains
     ! Else R_1 = R_b, small_r_1 = r_b and gamma_1 = gamma_b
     ! n_1 is the number of channel functions, nc_1 is number of radial continuum basis orbitals
     function get_single_psi(k, n_1, nc_1, boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1, &
-        config_a, conj) result(func)
+        mass_c, config_a, conj) result(func)
 
         implicit none
 
         integer, intent(in) :: k, n_1, nc_1
-        real(wp), intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1
+        real(wp), intent(in) :: boundary_val_2, R_1, small_r_1, gamma_1, mu_1, m_1, mass_c
         logical, intent(in) :: config_a, conj
 
         real(wp) :: func
@@ -213,7 +222,7 @@ contains
         do i = 1, n_1
             do j = 1, nc_1
                 func = func + (get_single_phi(i, boundary_val_2, R_1, small_r_1, gamma_1, &
-                    mu_1, m_1, config_a, conj) * (1 / R_1) * &
+                    mu_1, m_1, mass_c, config_a, conj) * (1._wp / R_1) * &
                     get_single_radial_func(R_1, i, j, config_a) * &
                     get_single_coeff(i, j, k, config_a))
             end do
@@ -243,7 +252,7 @@ contains
         do i = 1, n_1
             do j = 1, nc_1
                 func = func + (get_mixed_phi(i, boundary_val_2, R_1, R_2, gamma_ab, config_a, &
-                    conj) * (1 / R_1) * get_mixed_radial_func(R_1, i, j, config_a) * &
+                    conj) * (1._wp / R_1) * get_mixed_radial_func(R_1, i, j, config_a) * &
                     get_mixed_coeff(i, j, k, config_a))
             end do
         end do
@@ -305,10 +314,10 @@ contains
 
         if (config_a) then
             coeff = real(i, kind=wp) + real(j, kind=wp) + real(k, kind=wp)
-            coeff = 1.0_wp / coeff
+            coeff = 1._wp / coeff
         else
             coeff = real(i, kind=wp) + real(j, kind=wp) + real(k, kind=wp)
-            coeff = 1.0_wp / coeff
+            coeff = 1._wp / coeff
         end if
 
 
@@ -327,10 +336,10 @@ contains
 
         if (config_a) then
             coeff = real(i, kind=wp) * real(j, kind=wp) * real(k, kind=wp)**2._wp
-            coeff = 1 / coeff
+            coeff = 1._wp / coeff
         else
             coeff = (real(i, kind=wp) * real(j, kind=wp) * real(k, kind=wp))**2._wp
-            coeff = 1 / coeff
+            coeff = 1._wp / coeff
         end if
 
 
@@ -383,7 +392,7 @@ contains
             if (channel_func_1) then
                 if (single_func_1) then
                     integrand_1 = get_single_phi(idx_1, boundary_val_2, R_1, small_r_1, gamma_1, &
-                        mu_1, m_1, config_a, conj)
+                        mu_1, m_1, mass_c, config_a, conj)
                 else
                     integrand_1 = get_mixed_phi(idx_1, boundary_val_2, R_1, R_2, gamma_ab, &
                         config_a, conj)
@@ -391,7 +400,7 @@ contains
             else
                 if (single_func_1) then
                     integrand_1 = get_single_psi(idx_1, n_1, nc_1, boundary_val_2, R_1, &
-                        small_r_1, gamma_1, mu_1, m_1, config_a, conj)
+                        small_r_1, gamma_1, mu_1, m_1, mass_c, config_a, conj)
                 else
                     integrand_1 = get_mixed_psi(idx_1, n_1, nc_1, boundary_val_2, R_1, R_2, &
                         gamma_ab, config_a, conj)
@@ -402,7 +411,7 @@ contains
             if (channel_func_2) then
                 if (single_func_2) then
                     integrand_2 = get_single_phi(idx_2, boundary_val_2, R_1, small_r_1, gamma_1, &
-                        mu_1, m_1, config_a, conj)
+                        mu_1, m_1, mass_c, config_a, conj)
                 else
                     integrand_2 = get_mixed_phi(idx_2, boundary_val_2, R_1, R_2, gamma_ab, &
                         config_a, conj)
@@ -410,7 +419,7 @@ contains
             else
                 if (single_func_2) then
                     integrand_2 = get_single_psi(idx_2, n_1, nc_1, boundary_val_2, R_1, &
-                        small_r_1, gamma_1, mu_1, m_1, config_a, conj)
+                        small_r_1, gamma_1, mu_1, m_1, mass_c, config_a, conj)
                 else
                     integrand_2 = get_mixed_psi(idx_2, n_1, nc_1, boundary_val_2, R_1, R_2, &
                         gamma_ab, config_a, conj)
@@ -444,7 +453,8 @@ contains
             integer :: i, j
             logical :: verbose
 
-            verbose = .true.
+            ! verbose = .true.
+            verbose = .false.
 
             total_integral = 0._wp
             temp_integral = 0._wp
@@ -1197,7 +1207,7 @@ contains
     ! Transform surface amplitudes w_ik from mixed to single Jacobi coordinates
     function transform_amps(old_amps, n_1, nc_1, nt, simpson_n, boundary_val_1, &
         boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, coords, trans_coords, config_a, mixed_int, &
-        sub_comm, sub_comm_size) result(amps)
+        sub_comm, sub_comm_size, rank) result(amps)
 
       implicit none
 
@@ -1208,17 +1218,18 @@ contains
         logical, intent(in) :: config_a, mixed_int
 
         ! MPI variables
-        integer, intent(in) :: sub_comm, sub_comm_size
+        integer, intent(in) :: sub_comm, sub_comm_size, rank
 
-        integer :: i, k, n, m, imin, imax, progress, num_values, counts(sub_comm_size), &
-            disps(sub_comm_size)
+        integer :: i, k, n, m, imin, imax, progress, num_values
+
         real(wp) :: integral_1(n_1), integral_2(nt), amps(n_1, nt)
         logical :: verbose, channel_func_1, single_func_1, channel_func_2, single_func_2
 
         ! MPI variables
-        integer :: ierr
+        integer :: ierr, recv_status(MPI_STATUS_SIZE)
 
-        verbose = .true.
+        ! verbose = .true.
+        verbose = .false.
 
         ! Initialise amps array
         do i = 1, n_1
@@ -1287,25 +1298,22 @@ contains
         ! Send all amps to rank 0
         if (rank == 0) then
             ! Receive from all other ranks
-            do i = 0, sub_comm_size - 1
-                imin = 1 + i * n_1 / sub_comm_size
+            do i = 1, sub_comm_size - 1
+                    imin = 1 + i * n_1 / sub_comm_size
                     if (i == sub_comm_size - 1) then
-                        imax = n_1
+                            imax = n_1
                     else
-                        imax = (i + 1) * n_1 / sub_comm_size
+                            imax = (i + 1) * n_1 / sub_comm_size
                     end if
 
-                    counts(i+1) = (imax - imin + 1) * nt
-                    disps(i+1) = imin - 1
+                    num_values = (imax - imin + 1) * nt
+                    call MPI_Recv(amps(imin:imax, :), num_values, &
+                            MPI_DOUBLE_PRECISION, i, 0, sub_comm, recv_status, ierr)
             end do
-
-            call MPI_GatherV(MPI_IN_PLACE, counts(1), MPI_DOUBLE_PRECISION, amps, counts, disps, &
-                MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
         else
             ! All non-zero ranks send to rank 0
             num_values = (imax - imin + 1) * nt
-            call MPI_GatherV(amps(imin:imax, :), num_values, MPI_DOUBLE_PRECISION, amps, counts, &
-                disps, MPI_DOUBLE_PRECISION, 0, sub_comm, ierr)
+            call MPI_Ssend(amps(imin:imax, :), num_values, MPI_DOUBLE_PRECISION, 0, 0, sub_comm, ierr)
         end if
 
         ! All sends/receives complete
@@ -1318,7 +1326,8 @@ contains
     ! Currently calculated through integration, but for appropriate channel functions
     ! should be calculable directly from radial functions at the boundary and coefficients
     function calc_old_amps(n, nc, nt, simpson_n, coords, trans_coords, boundary_val_1, &
-        boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, config_a, mixed_int) result(amps)
+        boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, config_a, mixed_int, sub_comm, &
+        sub_comm_size, rank) result(amps)
 
         implicit none
 
@@ -1328,9 +1337,18 @@ contains
             mu_1, mu_2, m_1, m_2, mass_c
         logical, intent(in) :: config_a, mixed_int
 
+        ! MPI variables
+        integer, intent(in) :: sub_comm, sub_comm_size, rank
+
         real(wp) :: amps(n, nt)
-        integer :: i, k
-        logical :: channel_func_1, single_func_1, channel_func_2, single_func_2
+        integer :: i, k, imin, imax, progress, num_values
+        logical :: verbose, channel_func_1, single_func_1, channel_func_2, single_func_2
+
+        ! MPI variables
+        integer :: ierr, recv_status(MPI_STATUS_SIZE)
+
+        ! verbose = .true.
+        verbose = .false.
 
         ! Take inner product of channel function i in the mixed basis
         ! with basis function k in mixed basis
@@ -1339,7 +1357,33 @@ contains
         channel_func_2 = .false.
         single_func_2 = .false.
 
+        ! Initialise old amps
         do i = 1, n
+            do k = 1, nt
+                amps(i, k) = 0._wp
+            end do
+        end do
+
+        ! Divide calculation of amps (i runs between 1 and n overall)
+        imin = 1 + rank * n / sub_comm_size
+        if (rank == sub_comm_size - 1) then
+            imax = n
+        else
+            imax = (rank + 1) * n / sub_comm_size
+        end if
+
+        ! print *, "On rank ", rank, "Loop min = ", imin, "Loop max = ", imax
+        do i = imin, imax
+
+            ! print progress every ~20% for each process
+            if ((imax - imin >= 4) .and. verbose) then
+                progress = 100 * (i - imin) / (imax - imin)
+                if (mod((i - imin), (imax - imin + 1) / 5) == 0 &
+                .or. i == imax) then
+                    print *, "On rank", rank, "...Progress... ", progress, "%"
+                end if
+            end if
+
             do k = 1, nt
                 amps(i, k) = integrate_double_Simpson(simpson_n, boundary_val_1, boundary_val_2, &
                     n, nc, i, k, mu_1, mu_2, m_1, m_2, mass_c, coords, trans_coords, config_a, &
@@ -1347,6 +1391,30 @@ contains
                 amps(i, k) = amps(i, k) / boundary_val_1
             end do
         end do
+
+        ! Send all amps to rank 0
+        if (rank == 0) then
+            ! Receive from all other ranks
+            do i = 1, sub_comm_size - 1
+                    imin = 1 + i * n / sub_comm_size
+                    if (i == sub_comm_size - 1) then
+                            imax = n
+                    else
+                            imax = (i + 1) * n / sub_comm_size
+                    end if
+
+                    num_values = (imax - imin + 1) * nt
+                    call MPI_Recv(amps(imin:imax, :), num_values, &
+                            MPI_DOUBLE_PRECISION, i, 0, sub_comm, recv_status, ierr)
+            end do
+        else
+            ! All non-zero ranks send to rank 0
+            num_values = (imax - imin + 1) * nt
+            call MPI_Ssend(amps(imin:imax, :), num_values, MPI_DOUBLE_PRECISION, 0, 0, sub_comm, ierr)
+        end if
+
+        ! All sends/receives complete
+        call MPI_Barrier(sub_comm, ierr)
 
     end function calc_old_amps
 
@@ -1375,9 +1443,10 @@ contains
         double precision :: time(9), t_diff
 
         ! MPI variables
-        integer :: sub_comm_size, ierr
+        integer :: sub_comm_size, rank, ierr
 
         call MPI_Comm_size(sub_comm, sub_comm_size, ierr)
+        call MPI_Comm_rank(sub_comm, rank, ierr)
 
         ! Initialise old amps
         do i = 1, n_1 + n_2
@@ -1393,8 +1462,8 @@ contains
             end do
         end do
 
-!        verbose = .false.
-        verbose = .true.
+        ! verbose = .true.
+        verbose = .false.
 
         ! At the R_a boundary
         config_a = .true.
@@ -1448,7 +1517,8 @@ contains
 
         ! Calculate amplitudes in mixed Jacobi coordinates at R_a boundary
         old_amps(:n_1, :) = calc_old_amps(n_1, nc_1, nt, simpson_n_1, coords_a, trans_coords_a, &
-            boundary_val_1, boundary_val_2, mu_a, mu_b, m_b, m_a, mass_c, config_a, mixed_int)
+            boundary_val_1, boundary_val_2, mu_a, mu_b, m_b, m_a, mass_c, config_a, mixed_int, &
+            sub_comm, sub_comm_size, rank)
 
         ! Check the timer after surface amplitude calculation, before amplitudes transformed
         call MPI_Barrier(sub_comm, ierr)
@@ -1466,7 +1536,7 @@ contains
         ! Transform surface amplitudes at R_a boundary
         new_amps(:n_1, :) = transform_amps(old_amps(:n_1, :), n_1, nc_1, nt, simpson_n_1, &
             boundary_val_1, boundary_val_2, mu_a, mu_b, m_b, m_a, mass_c, coords_a, &
-            trans_coords_a, config_a, mixed_int, sub_comm, sub_comm_size)
+            trans_coords_a, config_a, mixed_int, sub_comm, sub_comm_size, rank)
 
         ! Check the timer after surface amplitude transformation, before grid points calculated
         call MPI_Barrier(sub_comm, ierr)
@@ -1526,7 +1596,8 @@ contains
 
         ! Calculate amplitudes in mixed Jacobi coordinates at R_b boundary
         old_amps(n_1+1:, :) = calc_old_amps(n_2, nc_2, nt, simpson_n_1, coords_b, trans_coords_b, &
-            boundary_val_1, boundary_val_2, mu_b, mu_a, m_a, m_b, mass_c, config_a, mixed_int)
+            boundary_val_1, boundary_val_2, mu_b, mu_a, m_a, m_b, mass_c, config_a, mixed_int, &
+            sub_comm, sub_comm_size, rank)
 
         ! Check the timer after surface amplitude calculation, before amplitudes transformed
         call MPI_Barrier(sub_comm, ierr)
@@ -1544,7 +1615,7 @@ contains
         ! Transform surface amplitudes at R_b boundary
         new_amps(n_1+1:, :) = transform_amps(old_amps(n_1+1:, :), n_2, nc_2, nt, simpson_n_1, &
             boundary_val_1, boundary_val_2, mu_b, mu_a, m_a, m_b, mass_c, coords_b, &
-            trans_coords_b, config_a, mixed_int, sub_comm, sub_comm_size)
+            trans_coords_b, config_a, mixed_int, sub_comm, sub_comm_size, rank)
 
         ! Check the timer after surface amplitude transformation, before end of subroutine
         call MPI_Barrier(sub_comm, ierr)
