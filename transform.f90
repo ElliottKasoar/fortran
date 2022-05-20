@@ -60,6 +60,9 @@ contains
         ! Note: 4._wp*atan(1._wp) = pi
         mixed_lims = (/ 0._wp, 3._wp, 0._wp, 5._wp, 0._wp, 4._wp*atan(1._wp) /)
 
+        ! Evaluate integrals in mixed Jacobi coordinates
+        mixed_int = .true.
+
         ! Calculate mass relations (three masses defined within)
         call calc_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
@@ -93,7 +96,6 @@ contains
         call MPI_Barrier(comm, ierr)
         time(2) = MPI_Wtime()
 
-        mixed_int = .true.
         call transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, m_a, &
             m_b, mass_c, mixed_int, comm)
 
@@ -109,7 +111,8 @@ contains
             print *, "Transforming in single basis..."
         end if
 
-        mixed_int = .false.
+        ! Evaluate integrals using single Jacobi coordinates
+        mixed_int = .not. mixed_int
         call transform_all_amps(n_1, nc_1, n_2, nc_2, nt, simpson_n, mixed_lims, mu_a, mu_b, m_a, &
             m_b, mass_c, mixed_int, comm)
 
@@ -157,6 +160,7 @@ contains
         mu_b = mass_a * mass_b * mass_c / (mass_total * m_b)
 
     end subroutine calc_masses
+
 
     ! Channel functions (phi or theta) in single Jacobi coordinates
     ! If config_a, R_1 = R_a, small_r_1 = r_a and gamma_1 = gamma_a
@@ -437,24 +441,20 @@ contains
     ! not config_a and mixed_int: x = R_b, y = R_a and z = gamma_ab
     ! config_a and not mixed_int: x = R_a, y = r_a, z = gamma_a
     ! not config_a and not mixed_int: x = R_b, y = r_b, z = gamma_b
-    function integrate_double_Simpson(simpson_n, x, boundary_val_2, n_1, nc_1, channel_num, &
-        basis_num, mu_1, mu_2, m_1, m_2, mass_c, coords, trans_coords, config_a, mixed_int, &
+    function integrate_double_Simpson(simpson_n, x, boundary_val_2, n_1, nc_1, idx_1, idx_2, &
+        mu_1, mu_2, m_1, m_2, mass_c, coords, trans_coords, config_a, mixed_int, &
         channel_func_1, single_func_1, channel_func_2, single_func_2) result(total_integral)
 
             implicit none
 
-            integer, intent(in) :: simpson_n(2), n_1, nc_1, channel_num, basis_num
+            integer, intent(in) :: simpson_n(2), n_1, nc_1, idx_1, idx_2
             real(wp), intent(in) :: x, boundary_val_2, mu_1, mu_2, m_1, m_2, mass_c, coords(2, &
                 simpson_n(1)+1, simpson_n(2)+1), trans_coords(2, simpson_n(1)+1, simpson_n(2)+1)
-            logical, intent(in) :: config_a, channel_func_1, single_func_1, channel_func_2, &
-                single_func_2, mixed_int
+            logical, intent(in) :: config_a, mixed_int, channel_func_1, single_func_1, &
+                channel_func_2, single_func_2
 
             real(wp) :: width(2), y, z, temp_integral, z_integral, total_integral
             integer :: i, j
-            logical :: verbose
-
-            ! verbose = .true.
-            verbose = .false.
 
             total_integral = 0._wp
             temp_integral = 0._wp
@@ -488,8 +488,8 @@ contains
 
                     ! Evaluate integral at this point
                     temp_integral = integrand_func(x, y, z, boundary_val_2, mu_1, m_1, mass_c, &
-                        trans_coords(:, i+1, j+1), channel_num, basis_num, n_1, nc_1, config_a, &
-                        mixed_int, channel_func_1, single_func_1, channel_func_2, single_func_2)
+                        trans_coords(:, i+1, j+1), idx_1, idx_2, n_1, nc_1, config_a, mixed_int, &
+                        channel_func_1, single_func_1, channel_func_2, single_func_2)
 
                     if (j == 0 .or. j == simpson_n(2)) then
                         z_integral = z_integral + temp_integral
@@ -660,6 +660,10 @@ contains
     end function estimate_jacobi_lims
 
 
+    ! Get the limits of small_r_a (get_r_lims) for a known R_1
+    ! or the limits of gamma_1 (get_gamma_lims) for a known R_1 and r_1
+    ! The limits can be estimated (estimate_lims) or calculated analytically
+    ! Both limits are set to 0._wp if valid coordinates cannot be found
     function get_jacobi_lims(mixed_lims, R_1, small_r_1, mu_1, m_1, mass_c, get_r_lims, &
         get_gamma_lims, estimate_lims, config_a) result(lims)
 
@@ -1214,6 +1218,12 @@ contains
     end function transform_grid
 
 
+    ! Determine grid of mixed Jacobi coordinates (R_a, R_b and gamma_ab)
+    ! or single Jacobi coordinates (R_a, r_a and gamma_a) or (R_b, r_b and gamma_b)
+    ! Mixed Jacobi or single Jacobi grid is determined by the mixed_int flag
+    ! Choice of single coordinates is determined by the config_a flag
+    ! Grid defined by limits [R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max]
+    ! and number of points in each coordinate [n_R_a, n_R_b, n_gamma_ab]
     function get_grid(x, boundary_val_2, n, mixed_lims, mu_1, m_1, mass_c, config_a, mixed_int, &
         sub_comm, sub_comm_size, rank) result(coords)
 
