@@ -12,160 +12,169 @@ program jacobi
 
     implicit none
 
-    integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
-    real(wp) :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, gamma_ab_integral, &
-        mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
-        single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
-        test_Simpson_integral, test_coord_lims(6), values(9)
-    logical :: save_inputs
-
-    ! MPI variables
-    integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
-    double precision :: time(7), t_diff
-
-    ! Initialise MPI
-    comm = MPI_COMM_WORLD
-    call MPI_Init(ierr)
-
-    ! Start the timer
-    call MPI_Barrier(comm, ierr)
-    time(1) = MPI_Wtime()
-
-    call MPI_Comm_rank(comm, rank, ierr)
-    call MPI_Comm_size(comm, comm_size, ierr)
-
-    ! Create new group with only process 0, and create corresponding new comm
-    sub_ranks(1) = 0
-    call MPI_Comm_group(comm, group, ierr);
-    call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
-    call MPI_Comm_create(MPI_COMM_WORLD, sub_group, sub_comm, ierr)
-
-    save_inputs = .true.
-
-    ! Number of points to generate for MC integration
-    mc_n = 10000
-
-    ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, gamma_ab_n)
-    mixed_jacobi_n = (/ 400, 400, 400 /)
-
-    ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, gamma_a_n)
-    single_jacobi_n = (/ 500, 500, 500 /)
-
-    ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
-    test_coord_n = (/ 1000, 1000, 1000 /)
-
-    ! Limits of integration (R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max)
-    ! Note: 4._wp*atan(1._wp) = pi
-    mixed_jacobi_lims = (/ 0._wp, 3._wp, 0._wp, 5._wp, 0._wp, 4._wp*atan(1._wp) /)
-
-    ! Limits of integration (x_min, x_max, y_min, y_max, z_min, z_max)
-    test_coord_lims = (/ 0._wp, 1._wp, 0._wp, 1._wp, 0._wp, 1._wp /)
-
-    ! Calculate mass relations (three masses defined within)
-    call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
-
-    if (rank == 0 .and. save_inputs) then
-        values = (/ mass_a, mass_b, mass_c, mixed_jacobi_lims(1), mixed_jacobi_lims(2), &
-            mixed_jacobi_lims(3), mixed_jacobi_lims(4), mixed_jacobi_lims(5), &
-            mixed_jacobi_lims(6) /)
-        open (unit=41, file='outputs/values', form='unformatted')
-        write(41) values
-        close (unit=41)
-    end if
-
-    ! Check the timer before separated mixed integration
-    call MPI_Barrier(comm, ierr)
-    time(2) = MPI_Wtime()
-
-    ! Calculate separable integrals for R_a, R_b and gamma_ab using Simpson's rule
-    if (rank == 0) then
-        R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
-            mixed_jacobi_lims(2), .true.)
-        R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
-            mixed_jacobi_lims(4), .true.)
-        gamma_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
-            mixed_jacobi_lims(5), mixed_jacobi_lims(6), .false.)
-
-        ! Integrals are separable so multiply for total integral
-        mixed_integral = R_a_integral * R_b_integral * gamma_ab_integral
-        print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
-    end if
-
-    ! Check the timer after separated mixed integration, before unseparated mixed integration
-    call MPI_Barrier(comm, ierr)
-    time(3) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(3) - time(2)
-        print *, "Integration time: ", t_diff
-    end if
-
-    mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, mu_a, &
-        mu_b, m_a, m_b, mass_c, .true., .false., .false., comm)
-    if (rank == 0) then
-        ! Calculate integral for R_a, R_b and gamma_ab using Simpson's rule on each in turn
-        print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
-            mixed_Simpson_integral
-    end if
-
-    ! Check the timer after unseparated mixed integration, before single Simpson integration
-    call MPI_Barrier(comm, ierr)
-    time(4) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(4) - time(3)
-        print *, "Integration time: ", t_diff
-    end if
-
-    ! Calculate integral for R_a, r_a and gamma_a using Simpson's rule on each in turn
-    single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
-        mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false., comm)
-    if (rank == 0) then
-        print *, "Single Jacobi integral using Simpson's rule = ", single_Simpson_integral
-    end if
-
-    ! Check the timer after single Simpson integration, before single MC integration
-    call MPI_Barrier(comm, ierr)
-    time(5) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(5) - time(4)
-        print *, "Integration time: ", t_diff
-    end if
-
-    ! Calculate integral for R_a, r_a and gamma_a using Monte Carlo integration
-    ! single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, &
-    !     mass_c, comm)
-    ! if (rank == 0) then
-    !     print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
-    ! end if
-
-    ! Check the timer after single MC integration, before test integration
-    call MPI_Barrier(comm, ierr)
-    time(6) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(6) - time(5)
-        print *, "Integration time: ", t_diff
-    end if
-
-    ! Calculate integral for x, y and z using Simpson's rule on each in turn
-    ! test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
-    !     mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true., comm)
-    ! if (rank == 0) then
-    !     print *, "Test integral using Simpson's rule = ", test_Simpson_integral
-    ! end if
-
-    ! Check the timer after test integration, at end of program
-    call MPI_Barrier(comm, ierr)
-    time(7) = MPI_Wtime()
-    if (rank == 0) then
-        t_diff = time(7) - time(6)
-        print *, "Integration time: ", t_diff
-
-        t_diff = time(7) - time(1)
-        print *, "Program time: ", t_diff
-    end if
-
-    call MPI_Finalize(ierr)
+    call main()
 
 contains
+
+    subroutine main()
+
+        implicit none
+
+        integer :: mixed_jacobi_n(3), single_jacobi_n(3), mc_n, test_coord_n(3)
+        real(wp) :: mixed_jacobi_lims(6), R_a_integral, R_b_integral, gamma_ab_integral, &
+            mixed_integral, mixed_Simpson_integral, single_Simpson_integral, &
+            single_MC_integral, mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b, &
+            test_Simpson_integral, test_coord_lims(6), values(9)
+        logical :: save_inputs
+
+        ! MPI variables
+        integer :: comm, rank, comm_size, ierr, group, sub_group, sub_ranks(1), sub_comm
+        double precision :: time(7), t_diff
+
+        ! Initialise MPI
+        comm = MPI_COMM_WORLD
+        call MPI_Init(ierr)
+
+        ! Start the timer
+        call MPI_Barrier(comm, ierr)
+        time(1) = MPI_Wtime()
+
+        call MPI_Comm_rank(comm, rank, ierr)
+        call MPI_Comm_size(comm, comm_size, ierr)
+
+        ! Create new group with only process 0, and create corresponding new comm
+        sub_ranks(1) = 0
+        call MPI_Comm_group(comm, group, ierr);
+        call MPI_Group_incl(group, 1, sub_ranks, sub_group, ierr)
+        call MPI_Comm_create(MPI_COMM_WORLD, sub_group, sub_comm, ierr)
+
+        save_inputs = .true.
+
+        ! Number of points to generate for MC integration
+        mc_n = 10000
+
+        ! Number of Simpson cells to split mixed Jacobi ingegral into (R_a_n, R_b_n, gamma_ab_n)
+        mixed_jacobi_n = (/ 400, 400, 400 /)
+
+        ! Number of Simpson cells to split single Jacobi integral into (R_a_n, r_a_n, gamma_a_n)
+        single_jacobi_n = (/ 500, 500, 500 /)
+
+        ! Number of Simpson cells to split test coordinate integral into (x_n, y_n, x_n)
+        test_coord_n = (/ 1000, 1000, 1000 /)
+
+        ! Limits of integration (R_a_min, R_a_max, R_b_min, R_b_max, gamma_ab_min, gamma_ab_max)
+        ! Note: 4._wp*atan(1._wp) = pi
+        mixed_jacobi_lims = (/ 0._wp, 3._wp, 0._wp, 5._wp, 0._wp, 4._wp*atan(1._wp) /)
+
+        ! Limits of integration (x_min, x_max, y_min, y_max, z_min, z_max)
+        test_coord_lims = (/ 0._wp, 1._wp, 0._wp, 1._wp, 0._wp, 1._wp /)
+
+        ! Calculate mass relations (three masses defined within)
+        call calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
+
+        if (rank == 0 .and. save_inputs) then
+            values = (/ mass_a, mass_b, mass_c, mixed_jacobi_lims(1), mixed_jacobi_lims(2), &
+                mixed_jacobi_lims(3), mixed_jacobi_lims(4), mixed_jacobi_lims(5), &
+                mixed_jacobi_lims(6) /)
+            open (unit=41, file='outputs/values', form='unformatted')
+            write(41) values
+            close (unit=41)
+        end if
+
+        ! Check the timer before separated mixed integration
+        call MPI_Barrier(comm, ierr)
+        time(2) = MPI_Wtime()
+
+        ! Calculate separable integrals for R_a, R_b and gamma_ab using Simpson's rule
+        if (rank == 0) then
+            R_a_integral = integrate_single_Simpson(mixed_jacobi_n(1), mixed_jacobi_lims(1), &
+                mixed_jacobi_lims(2), .true.)
+            R_b_integral = integrate_single_Simpson(mixed_jacobi_n(2), mixed_jacobi_lims(3), &
+                mixed_jacobi_lims(4), .true.)
+            gamma_ab_integral = integrate_single_Simpson(mixed_jacobi_n(3), &
+                mixed_jacobi_lims(5), mixed_jacobi_lims(6), .false.)
+
+            ! Integrals are separable so multiply for total integral
+            mixed_integral = R_a_integral * R_b_integral * gamma_ab_integral
+            print *, "Separated mixed Jacobi integral using Simpson's rule = ", mixed_integral
+        end if
+
+        ! Check the timer after separated mixed integration, before unseparated mixed integration
+        call MPI_Barrier(comm, ierr)
+        time(3) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(3) - time(2)
+            print *, "Integration time: ", t_diff
+        end if
+
+        mixed_Simpson_integral = integrate_triple_Simpson(mixed_jacobi_n, mixed_jacobi_lims, mu_a, &
+            mu_b, m_a, m_b, mass_c, .true., .false., .false., comm, rank)
+        if (rank == 0) then
+            ! Calculate integral for R_a, R_b and gamma_ab using Simpson's rule on each in turn
+            print *, "Unseparated mixed Jacobi integral using Simpson's rule = ", &
+                mixed_Simpson_integral
+        end if
+
+        ! Check the timer after unseparated mixed integration, before single Simpson integration
+        call MPI_Barrier(comm, ierr)
+        time(4) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(4) - time(3)
+            print *, "Integration time: ", t_diff
+        end if
+
+        ! Calculate integral for R_a, r_a and gamma_a using Simpson's rule on each in turn
+        single_Simpson_integral = integrate_triple_Simpson(single_jacobi_n, mixed_jacobi_lims, &
+            mu_a, mu_b, m_a, m_b, mass_c, .false., .true., .false., comm, rank)
+        if (rank == 0) then
+            print *, "Single Jacobi integral using Simpson's rule = ", single_Simpson_integral
+        end if
+
+        ! Check the timer after single Simpson integration, before single MC integration
+        call MPI_Barrier(comm, ierr)
+        time(5) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(5) - time(4)
+            print *, "Integration time: ", t_diff
+        end if
+
+        ! Calculate integral for R_a, r_a and gamma_a using Monte Carlo integration
+        ! single_MC_integral = integrate_MC(mc_n, mixed_jacobi_lims, mu_a, mu_b, m_a, m_b, &
+        !     mass_c, comm, rank)
+        ! if (rank == 0) then
+        !     print *, "Single Jacobi integral using Monte Carlo = ", single_MC_integral
+        ! end if
+
+        ! Check the timer after single MC integration, before test integration
+        call MPI_Barrier(comm, ierr)
+        time(6) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(6) - time(5)
+            print *, "Integration time: ", t_diff
+        end if
+
+        ! Calculate integral for x, y and z using Simpson's rule on each in turn
+        ! test_Simpson_integral = integrate_triple_Simpson(test_coord_n, test_coord_lims, &
+        !     mu_a, mu_b, m_a, m_b, mass_c, .false., .false., .true., comm, rank)
+        ! if (rank == 0) then
+        !     print *, "Test integral using Simpson's rule = ", test_Simpson_integral
+        ! end if
+
+        ! Check the timer after test integration, at end of program
+        call MPI_Barrier(comm, ierr)
+        time(7) = MPI_Wtime()
+        if (rank == 0) then
+            t_diff = time(7) - time(6)
+            print *, "Integration time: ", t_diff
+
+            t_diff = time(7) - time(1)
+            print *, "Program time: ", t_diff
+        end if
+
+        call MPI_Finalize(ierr)
+
+    end subroutine main
+
 
     subroutine calculate_masses(mass_a, mass_b, mass_c, mass_total, mu_a, mu_b, m_a, m_b)
 
@@ -425,7 +434,7 @@ contains
     ! test_coords flags use limits that depend on other variables
     ! These dependencies are defined in separate functions
     function integrate_triple_Simpson(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, &
-        mixed_jacobi, single_jacobi, test_coords, sub_comm) result(total_integral)
+        mixed_jacobi, single_jacobi, test_coords, sub_comm, rank) result(total_integral)
 
         implicit none
 
@@ -434,7 +443,7 @@ contains
         logical, intent(in) :: mixed_jacobi, single_jacobi, test_coords
 
         ! MPI variables
-        integer, intent(in) :: sub_comm
+        integer, intent(in) :: sub_comm, rank
 
         real(wp) :: width(3), x, y, z, lims(6), temp_integral, z_integral, y_integral, &
             partial_integral, total_integral, prev_lims(2), r_lims(3, n(1)+1), &
@@ -716,7 +725,7 @@ contains
 
 
     ! Calculate integral with Monte Carlo
-    function integrate_MC(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, sub_comm) &
+    function integrate_MC(n, mixed_lims, mu_a, mu_b, m_a, m_b, mass_c, sub_comm, rank) &
         result(total_integral)
 
         implicit none
@@ -725,7 +734,7 @@ contains
         integer, intent(in) :: n
 
         ! MPI variables
-        integer, intent(in) :: sub_comm
+        integer, intent(in) :: sub_comm, rank
 
         real(wp) :: width(3), coords(3), single_lims(6), temp_integral, partial_integral, &
             total_integral, r_lims(3, n+1), gamma_lims(4, n+1)
