@@ -292,3 +292,524 @@ Inputs:
 
 Output:
 * integrand: The evaluated integrand
+
+
+
+## transform.f90
+
+This program is designed to transform surface amplitudes at the boudary between the inner region, defined by mixed Jacobi coordinates (R_a, R_b, gamma_ab), and the outer regions, defined by single Jacobi coordinates ((R_a, r_a, gamma_a) or (R_b, r_b, gamma_b)), where the boundary is defined by constant R_a or R_b respectively.
+
+This requires the calculation of the inner products of wavefunctions within the inner region, over the two variables not held fixed at the relevant boundary, which is performed using Simpson's rule to carry out the double integration. The integration is carried out using both mixed Jacobi coordinates and single Jacobi coordinates for comparison, although the mixed Jacobi coordinates are expected to be preferable, as the integration limits are fixed in this basis.
+
+Note:
+
+* Prior to transforming the amplitudes, the program currently also calculates the "old" amplitudes in the mixed Jacobi basis. This should not be required in the future, as these amplitudes may be calculated much more efficiently, but this functionality allows for testing of the more efficient method, and provides placeholder amplitudes to be transformed
+
+* The wavefunctions used to calculate the "old" and transformed amplitudes are arbitrary placeholders that do not meet all requirements. However, the channel functions have been defined such that they are zero at the other channel's boundary
+
+* Many of the functions within this program are adapted from jacobi.f90
+
+Unless otherwise stated:
+* config_a defines whether currently considering channel A (true) or channel B (false)
+* mixed_int is the flag to determine whether to carry out integrations using mixed Jacobi (true) or single Jacobi (false) coordinates
+
+* (R_1, small_r_1 and gamma_1) are the single Jacobi coordinates for channel A (R_a, r_a, gamma_a) or B (R_b, r_b, gamma_b)
+* (R_1, R_2 and gamma_ab) are mixed Jacobi coordinates, with R_2 representing R_b or R_a for channel A or B respectively
+
+* mass_1 is the mass of atom A for channel A, or atom B for channel B
+* mass_2 is the mass of atom B for channel A, or atom A for channel B
+* mass_c is the mass of atom C
+* mass_total is the sum of the masses of A, B and C
+* mu_1 is the reduced channel mass for channel A (mu_a)
+* mu_2 is the reduced channel mass for channel B (mu_b)
+* m_1 is the internal reduced mass for channel A (m_b)
+* m_2 is the internal reduced mass for channel B (m_a)
+
+* simpson_n: Number of Simpson cells used for mixed and single Jacobi integration using Simpson's rule
+* mixed_lims: Integration limits used for mixed and single Jacobi integration, in terms of mixed Jacobi coordinates
+* boundary_val_1 is the boundary value of R_a or R_b for channel A or B respectively
+* boundary_val_2 is the boundary value of R_b or R_a for channel A or B respectively
+
+* coords: Grid of coordinates defining the Simpson cells to be used during integration
+* trans_coords: Grid of coordinates in coordinates not being used during integration
+
+* n_1 is the number of channel functions for configuration A
+* nc_1 is the number of radial continuum basis orbitals for configuration A
+* n_2 is the number of channel functions for configuration B
+* nc_2 is the number of radial continuum basis orbitals for configuration B
+* b is the number of quadratically integrable functions (not used currently)
+* nt is the number of linearly independent basis functions
+
+* channel_func_1 is a flag determining whether the bra is a channel function (true) or basis function (false)
+* single_func_1 is a flag determining whether the bra is in single Jacobi (true) or mixed Jacobi (false) coordinates
+* channel_func_2 is a flag determining whether the ket is a channel function (true) or basis function (false)
+* single_func_2 is a flag determining whether the ket is in single Jacobi (true) or mixed Jacobi (false) coordinates
+
+* sub_comm is a (subset of) the MPI communicator
+* sub_comm_size is the size of sub_comm
+* rank is the MPI process rank
+
+
+### module precisn
+
+This defines the precision of real numbers throughout the program, currently such that real numbers are stored up to 12 decimal places.
+
+
+### subroutine main
+
+This sets up the main integration parameters used throughout the program and calls the function that calculates and transforms the surface amplitudes. When all code is uncommented, these calculations are performed in both the mixed and single Jacobi coordinates, and the total time for this in each set of coordinates is output.
+
+Options:
+* save_inputs: If true, saves the values of masses, Jacobi integration limits and coordinate system for the integration in an unformatted file (outputs/values)
+* simpson_n
+* mixed_lims
+* mixed_int: When all code is uncommented, this simply defines the order these are performed, as the transformation is performed using both coordinates
+* n_1
+* nc_1
+* n_2
+* nc_2
+* b
+
+
+### subroutine calculate_masses
+
+See jacobi.f90
+
+
+### function get_single_phi
+
+This evaluates the ith channel function in single Jacobi coordinates for configuration A or B. Currently arbitrarily defined, other than to be zero at the opposite channel boundary.
+
+Inputs:
+* i: Index of channel function
+* boundary_val_2
+* R_1
+* small_r_1
+* gamma_1
+* mu_1
+* m_1
+* mass_c
+* config_a
+* conj: Flag to specify complex conjugate (currently unused)
+
+Outputs:
+* func: Evaluated function
+
+### function get_mixed_phi
+
+This evaluates the ith channel function in mixed Jacobi coordinates for configuration A or B. Currently arbitrarily defined, other than to be zero at the opposite channel boundary.
+
+Inputs:
+* i: Index of channel function
+* boundary_val_2
+* R_1
+* R_2
+* gamma_ab
+* config_a
+* conj: Flag to specify complex conjugate (currently unused)
+
+Output:
+* func: Evaluated function
+
+
+### function get_single_psi
+
+This evaluates the kth basis function in single Jacobi coordinates for configuration A or B, using the relevant channel functions, radial continuum orbital functions and coefficients defined in their own functions.
+
+Inputs:
+* k: Index of basis function
+* n_1
+* nc_1
+* boundary_val_2
+* R_1
+* small_r_1
+* gamma_1
+* mu_1
+* m_1
+* mass_c
+* config_a
+* conj: Flag to specify complex conjugate (currently unused)
+
+Output:
+* func: Evaluated function
+
+
+### function get_mixed_psi
+
+This evaluates the kth basis function in mixed Jacobi coordinates for configuration A or B, using the relevant channel functions, radial continuum orbital functions and coefficients defined in their own functions.
+
+Inputs:
+* k: Index of basis function
+* n_1
+* nc_1
+* boundary_val_2
+* R_1
+* R_2
+* gamma_ab
+* config_a
+* conj: Flag to specify complex conjugate (currently unused)
+
+Output:
+* func: Evaluated function
+
+
+### function get_single_radial_func
+
+This evaluates the radial continuum basis orbital (i, j) in single Jacobi coordinates. Currently arbitrarily defined.
+
+Inputs:
+* R_1
+* i: Index of radial function
+* j: Index of radial function
+* config_a
+
+Output:
+* radial_func: Evaluated function
+
+
+### function get_mixed_radial_func
+
+This evaluates the radial continuum basis orbital (i, j) in mixed Jacobi coordinates. Currently arbitrarily defined.
+
+Inputs:
+* R_1
+* i: Index of radial function
+* j: Index of radial function
+* config_a
+
+Output:
+* radial_func: Evaluated function
+
+
+### function get_single_coeff
+
+This evaluates the coefficient (i, j, k) in single Jacobi coordinates. Currently arbitrarily defined.
+
+Inputs:
+* i: Index of coefficient
+* j: Index of coefficient
+* k: Index of coefficient
+* config_a
+
+Output:
+* coeff: Coefficient
+
+
+### function get_mixed_coeff
+
+This evaluates the coefficient (i, j, k) in mixed Jacobi coordinates. Currently arbitrarily defined.
+
+Inputs:
+* i: Index of coefficient
+* j: Index of coefficient
+* k: Index of coefficient
+* config_a
+
+Output:
+* coeff: Coefficient
+
+
+### function integrand_func
+
+This evaluates the integrand at (x, y, z), including the volume element R_2^2 sin(gamma_ab) or small_r_2^2 sin(gamma_1), using a number of flags and indices to determine the relevant bra and ket functions being that are integrated. See also: jacobi.f90: single_jacobi_integrand_func
+
+Inputs:
+* x: Jacobi coordinate, representing R_1
+* y: Jacobi coordinate, representing R_2 (mixed_int) or small_r_1 (not mixed_int)
+* z: Jacobi coordinate, representing gamma_ab (mixed_int) or gamma_1 (not mixed_int)
+* boundary_val_2
+* mu_1
+* m_1
+* mass_c
+* trans_coords
+* idx_1: Bra function index
+* idx_2: Ket function index
+* n_1
+* nc_1
+* config_a
+* mixed_int
+* channel_func_1
+* single_func_1
+* channel_func_2
+* single_func_2
+
+Output:
+* total_integrand: Evaluated integrand
+
+
+### function integrate_double_Simpson
+
+This uses Simpson's rule to integrate two variables. See also jacobi.f90: integrate_triple_Simpson
+
+Inputs:
+* simpson_n: Number of Simpson cells used for mixed and single Jacobi integration using Simpson's rule
+* x: R_1
+* boundary_val_2
+* n_1
+* nc_1
+* idx_1: Bra function index
+* idx_2: Ket function index
+* mu_1
+* mu_2
+* m_1
+* m_2
+* mass_c
+* coords
+* trans_coords
+* config_a
+* mixed_int
+* channel_func_1
+* single_func_1
+* channel_func_2
+* single_func_2
+
+Output:
+* total_integral: Integral calculated
+
+
+### function estimate_jacobi_lims
+
+Estimates the range of small_r_1 or gamma_1. See jacobi.f90 (note: parameters passed in different order).
+
+
+### function get_jacobi_lims
+
+Gets the limits of small_r_1 or gamma_1, through estimation or analytically. See jacobi.f90:get_limits (note: parameters passed in different order, generalised for channels A and B).
+
+
+### function calc_small_r_from_mixed
+
+Calculates small_r_1 from mixed Jacobi coordinates.
+
+Inputs:
+* R_1
+* R_2
+* gamma_ab
+* mu_1
+* m_1
+* mass_c
+
+Output:
+* r
+
+Errors:
+* If small_r_1 is calculated to be less than 0, a warning will be printed, and small_r_1 will be set to 0
+
+
+### function calc_R_from_single
+
+Calculates R_2 from single Jacobi coordinates.
+
+Inputs:
+* R_1
+* small_r_1
+* gamma_1
+* mu_1
+* m_1
+* mass_c
+* config_a
+
+Output:
+* R_2
+
+
+### function calc_gamma_from_mixed
+
+Calculates gamma_1 from mixed Jacobi coordinates. See jacobi.f90:calc_gamma_a (note: generalised for channels A and B).
+
+
+### function calc_gamma_from_single
+
+Calculates gamma_ab from single Jacobi coordinates.
+
+Inputs:
+* R_1
+* small_r_1
+* gamma_1
+* mu_1
+* m_1
+* mass_c
+* config_a
+
+Options:
+* gamma_tol: A tolerance for the value of cos(gamma_a), which may be slightly outside the valid range (-1 - 1) due to numerical errors
+
+Output
+* gamma_ab
+
+Errors:
+* If cos(gamma_a) is outside its valid range, including the defined tolerance, the program will stop. This may be because the tolerance is too small, or there may be an error with the inputs
+
+
+### function calc_gamma_from_integral
+
+Calculates gamma_1 from R_1, r_1 and gamma_ab.  See jacobi.f90:calc_gamma_a (note: generalised for channels A and B).
+
+
+### function transform_mixed_to_single
+
+Calculates a single Jacobi coordinate from a mixed Jacobi coordinate.
+
+Inputs:
+* R_1
+* R_2
+* gamma_ab
+* mu_1
+* m_1
+* mass_c
+* config_a
+
+Outputs:
+single_coords: (small_r_1, gamma_1)
+
+
+### function transform_single_to_mixed
+
+Calculates a mixed Jacobi coordinate from single Jacobi coordinate.
+
+Inputs:
+* R_1
+* small_r_1
+* gamma_1
+* mu_1
+* m_1
+* mass_c
+* config_a
+
+Output:
+* mixed_coords: (R_2, gamma_ab)
+
+
+### function transform_grid
+
+Transforms a grid of mixed Jacobi coordinates to single Jacobi coordinates or vice versa, with the direction of the transformation determined the coordinates being used in the integration (via the mixed_int flag).
+
+Inputs:
+* x: R_1
+* coords
+* n: Number of coordinates for each of the two variables to transform
+* mu_1
+* m_1
+* mass_c
+* config_a
+* mixed_int
+* sub_comm
+* sub_comm_size
+* rank
+
+Options:
+* verbose: If true, progress is printed
+
+Output:
+* trans_coords
+
+
+### function get_grid
+
+Determines the grid of coordinates defining the Simpson cells to be used during integration, with the choice of single or mixed Jacobi coordinates determined the mixed_int flag.
+
+Inputs:
+* x: R_1
+* boundary_val_2
+* n: Number of coordinates for each of the two variables defining the grid
+* mixed_lims
+* mu_1
+* m_1
+* mass_c
+* config_a
+* mixed_int
+* sub_comm
+* sub_comm_size
+* rank
+
+Options:
+* verbose: If true, progress is printed
+
+Output:
+* coords
+
+
+### function transform_amps
+
+Transform surface amplitudes w_ik from mixed ("old") to single Jacobi coordinates.
+
+Inputs:
+* old_amps: Surface amplitudes in mixed Jacobi coordinates
+* n_1
+* nc_1
+* nt
+* simpson_n: Number of Simpson cells used for mixed and single Jacobi integration using Simpson's rule
+* boundary_val_1
+* boundary_val_2
+* mu_1
+* mu_2
+* m_1
+* m_2
+* mass_c
+* coords
+* trans_coords
+* config_a
+* mixed_int
+* sub_comm
+* sub_comm_size
+* rank
+
+Options:
+* verbose: If true, progress is printed
+
+Output:
+* amps: Transformed amplitudes (in the single Jacobi basis)
+
+
+### function calc_old_amps
+
+Calculates the surface amplitudes in the mixed Jacobi basis. For appropriately chosen channel functions, this should not be required in the future.
+
+Inputs:
+* n: n_1 or n_2
+* nc: nc_1 or nc_2
+* nt
+* simpson_n
+* coords
+* trans_coords
+* boundary_val_1
+* boundary_val_2
+* mu_1
+* mu_2
+* m_1
+* m_2 mass_c
+* config_a
+* mixed_int
+* sub_comm
+* sub_comm_size
+* rank
+
+Options:
+* verbose: If true, progress is printed
+
+Output
+* amps: Surface amplitudes in mixed Jacobi basis ("old")
+
+
+### subroutine transform_all_amps
+
+This calculates surface amplitudes in mixed Jacobi coordinates ("old") and transforms these into single Jacobi coordinates, printing both the "old" and "new" amplitudes, and the time taken during various calculations. This includes calling functions to determine the grid to be used during integration in both mixed and single Jacobi coordinates, as well as functions to calculate the surface amplitudes in mixed Jacobi coordinates and transform these into single Jacobi coordinates. Calculations for channel A and B are performed seperately through the config_a flag.
+
+Inputs:
+* n_1
+* nc_1
+* n_2
+* nc_2
+* nt
+* simpson_n
+* mixed_lims
+* mu_a
+* mu_b
+* m_a
+* m_b
+* mass_c
+* mixed_int
+* sub_comm
+
+* Options:
+* verbose: If true, progress is printed
