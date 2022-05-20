@@ -510,16 +510,16 @@ contains
                 lims(3:4) = get_limits(.true., .false., .false., &
                     x, 0._wp, mixed_lims, mu_a, m_b, mass_c)
                 width(2) = abs(lims(4) - lims(3)) / real(n(2), kind=wp)
+
+                if (save_lims) then
+                    r_lims(1, i+1) = x
+                    r_lims(2:3, i+1) = lims(3:4)
+                end if
             end if
 
             if (test_coords) then
                 lims(3:4) = get_test_limits(.true., .false., x, 0._wp)
                 width(2) = abs(lims(4) - lims(3)) / real(n(2), kind=wp)
-            end if
-
-            if (save_lims) then
-                r_lims(1, i+1) = x
-                r_lims(2:3, i+1) = lims(3:4)
             end if
 
             do j = 0, n(2)
@@ -1033,6 +1033,10 @@ contains
     end function estimate_jacobi_lims
 
 
+    ! Get the limits of r_a (get_r_lims) for a known R_a
+    ! or the limits of gamma_a (get_gamma_lims) for a known R_a and r_a
+    ! The limits can be estimated (estimate_lims) or calculated analytically
+    ! Both limits are set to 0._wp if valid coordinates cannot be found
     function get_limits(get_r_lims, get_gamma_lims, estimate_lims, R_a, small_r_a, &
         mixed_lims, mu_a, m_b, mass_c) result(lims)
 
@@ -1140,6 +1144,9 @@ contains
     end function get_limits
 
 
+    ! Get limits for the test integrand
+    ! y limits are 0 and (1-x)
+    ! z limits are 0 and (1-x-y)
     function get_test_limits(get_y_lims, get_z_lims, x, y) result(lims)
 
         implicit none
